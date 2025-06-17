@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  mariadb:
+    image: mariadb:latest
+    container_name: foodapp.db
+    restart: always
+    env_file: .env
+    volumes:
+      - mariadb_data:/var/lib/mysql # Persistent data volume
+      - ./db_init:/docker-entrypoint-initdb.d # For initial schema/data
+    ports:
+      - "3306:3306" # Expose so the DB can be accessed from the local machine in dev
+
+volumes:
+  mariadb_data:
