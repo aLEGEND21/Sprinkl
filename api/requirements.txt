@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pymysql
+python-dotenv
+scikit-learn
+numpy
+pydantic
+python-multipart

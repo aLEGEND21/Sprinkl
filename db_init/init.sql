@@ -26,10 +26,16 @@ CREATE TABLE IF NOT EXISTS recipes (
 );
 
 -- 2. Users Table
--- Stores unique user IDs. These IDs will typically come from your mobile app's authentication
--- (e.g., Firebase Auth UID, or a UUID generated locally).
+-- Stores user information from OAuth providers (Google, etc.)
+-- 'id' is the unique identifier from the OAuth provider
 CREATE TABLE IF NOT EXISTS users (
-    id VARCHAR(255) PRIMARY KEY
+    id VARCHAR(255) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    image_url TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_email (email)
 );
 
 -- 3. User Feedback Table
@@ -61,3 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_recipes_meal_time ON recipes (time_mins); -- If y
 
 -- Optional: Create an index on user_feedback for faster lookup by user_id
 CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id ON user_feedback (user_id);
+
+-- Optional: Create indexes for users table
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at);

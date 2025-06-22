@@ -11,5 +11,20 @@ services:
     ports:
       - "3306:3306" # Expose so the DB can be accessed from the local machine in dev
 
+  api:
+    build: ./api
+    container_name: foodapp.api
+    restart: always
+    env_file: .env
+    ports:
+      - "3009:3009" # Expose API on port 3009
+    depends_on:
+      - mariadb
+    environment:
+      - MARIADB_HOST=mariadb
+    volumes:
+      - ./api:/app # Mount for development
+    command: uvicorn main:app --host 0.0.0.0 --port 3009
+
 volumes:
   mariadb_data:

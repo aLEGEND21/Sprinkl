@@ -1,1 +1,13 @@
+# Sensitive data
 .env*
+
+# Local development files
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
