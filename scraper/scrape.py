@@ -6,6 +6,7 @@ import time
 
 
 SITEMAP_URL = "https://zestfulkitchen.com/post-sitemap.xml"
+JSON_FILEPATH = "./raw_recipes.json"
 
 
 def load_page_links(driver: uc.Chrome, sitemap_url: str) -> list[str]:
@@ -67,6 +68,6 @@ except Exception as e:
     print(e)
 
 finally:
-    with open("recipes.json", "w") as f:
+    with open(JSON_FILEPATH, "w") as f:
         json.dump(recipes, f, indent=4)
     driver.quit()

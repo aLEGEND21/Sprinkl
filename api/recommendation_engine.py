@@ -14,11 +14,18 @@ import logging
 import numpy as np
 import pymysql
 import os
+import warnings
 from typing import List, Dict, Optional, Tuple
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 from dotenv import load_dotenv
 import random
+
+# Suppress scikit-learn numerical warnings
+warnings.filterwarnings(
+    "ignore", category=RuntimeWarning, module="sklearn.utils.extmath"
+)
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
 # Load environment variables
 load_dotenv()
@@ -72,6 +79,9 @@ class RecommendationEngine:
                     "SELECT id FROM recipes WHERE feature_vector IS NOT NULL"
                 )
                 self._recipe_ids_cache = {row[0] for row in cursor.fetchall()}
+            except Exception as e:
+                logger.error(f"_get_recipe_ids: error loading recipe IDs: {e}")
+                self._recipe_ids_cache = set()
             finally:
                 cursor.close()
                 conn.close()
@@ -88,7 +98,27 @@ class RecommendationEngine:
             result = cursor.fetchone()
             if result and result[0]:
                 feature_vector = json.loads(result[0])
-                return normalize(np.array([feature_vector]), norm="l2")[0]
+                vector_array = np.array(feature_vector, dtype=np.float64)
+
+                # Check for invalid values
+                if np.any(np.isnan(vector_array)) or np.any(np.isinf(vector_array)):
+                    logger.warning(
+                        f"Invalid feature vector for recipe {recipe_id}: contains NaN or Inf values"
+                    )
+                    return None
+
+                # Check if vector is all zeros
+                if np.all(vector_array == 0):
+                    logger.warning(f"Zero feature vector for recipe {recipe_id}")
+                    return None
+
+                # Normalize with safety check
+                norm = np.linalg.norm(vector_array)
+                if norm > 0:
+                    return vector_array / norm
+                else:
+                    logger.warning(f"Zero norm feature vector for recipe {recipe_id}")
+                    return None
             return None
         except Exception as e:
             logger.error(f"Error getting feature vector for recipe {recipe_id}: {e}")
@@ -122,10 +152,43 @@ class RecommendationEngine:
                 if feature_vector_json:
                     try:
                         feature_vector = json.loads(feature_vector_json)
-                        vectors[recipe_id] = normalize(
-                            np.array([feature_vector]), norm="l2"
-                        )[0]
+                        vector_array = np.array(feature_vector, dtype=np.float64)
+
+                        # Check for invalid values
+                        if np.any(np.isnan(vector_array)) or np.any(
+                            np.isinf(vector_array)
+                        ):
+                            logger.warning(
+                                f"Invalid feature vector for recipe {recipe_id}: contains NaN or Inf values"
+                            )
+                            continue
+
+                        # Check if vector is all zeros
+                        if np.all(vector_array == 0):
+                            logger.warning(
+                                f"Zero feature vector for recipe {recipe_id}"
+                            )
+                            continue
+
+                        # Normalize with safety check
+                        norm = np.linalg.norm(vector_array)
+                        if norm > 0:
+                            vectors[recipe_id] = vector_array / norm
+                        else:
+                            logger.warning(
+                                f"Zero norm feature vector for recipe {recipe_id}"
+                            )
+                            continue
+
                     except json.JSONDecodeError:
+                        logger.warning(
+                            f"Invalid JSON in feature vector for recipe {recipe_id}"
+                        )
+                        continue
+                    except Exception as e:
+                        logger.error(
+                            f"Error processing feature vector for recipe {recipe_id}: {e}"
+                        )
                         continue
 
             return vectors
@@ -151,24 +214,53 @@ class RecommendationEngine:
         if not feature_vectors:
             return []
 
+        # Validate target vector
+        if (
+            target_vector is None
+            or np.any(np.isnan(target_vector))
+            or np.any(np.isinf(target_vector))
+        ):
+            logger.warning("Invalid target vector for similarity computation")
+            return []
+
         # Convert to arrays for computation
         vectors_array = np.array(list(feature_vectors.values()))
         recipe_id_list = list(feature_vectors.keys())
 
-        # Compute similarities
-        similarities = cosine_similarity([target_vector], vectors_array)[0]
+        # Additional validation for vectors array
+        if np.any(np.isnan(vectors_array)) or np.any(np.isinf(vectors_array)):
+            logger.warning("Invalid vectors in batch for similarity computation")
+            return []
 
-        # Create results with exclusions
-        results = []
-        exclude_set = set(exclude_recipe_ids or [])
+        try:
+            # Compute similarities with error handling
+            similarities = cosine_similarity([target_vector], vectors_array)[0]
 
-        for i, recipe_id in enumerate(recipe_id_list):
-            if recipe_id not in exclude_set:
-                results.append((recipe_id, similarities[i]))
+            # Check for invalid similarity scores
+            valid_similarities = []
+            for i, sim in enumerate(similarities):
+                if not np.isnan(sim) and not np.isinf(sim):
+                    valid_similarities.append((recipe_id_list[i], float(sim)))
+                else:
+                    logger.warning(
+                        f"Invalid similarity score for recipe {recipe_id_list[i]}: {sim}"
+                    )
 
-        return results
+            # Create results with exclusions
+            results = []
+            exclude_set = set(exclude_recipe_ids or [])
 
-    async def get_random_recipes(
+            for recipe_id, similarity in valid_similarities:
+                if recipe_id not in exclude_set:
+                    results.append((recipe_id, similarity))
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Error computing similarities: {e}")
+            return []
+
+    def get_random_recipes(
         self, num_recipes: int = 5, exclude_recipe_ids: Optional[List[str]] = None
     ) -> List[str]:
         """Get random recipes efficiently"""
@@ -206,21 +298,47 @@ class RecommendationEngine:
 
         for recipe_id in liked_recipes:
             if recipe_id in feature_vectors:
-                if preference_vector is None:
-                    preference_vector = like_weight * feature_vectors[recipe_id]
-                else:
-                    preference_vector += like_weight * feature_vectors[recipe_id]
+                vector = feature_vectors[recipe_id]
+                # Validate vector before using
+                if (
+                    vector is not None
+                    and not np.any(np.isnan(vector))
+                    and not np.any(np.isinf(vector))
+                ):
+                    if preference_vector is None:
+                        preference_vector = like_weight * vector
+                    else:
+                        preference_vector += like_weight * vector
 
         for recipe_id in disliked_recipes:
             if recipe_id in feature_vectors:
-                if preference_vector is None:
-                    preference_vector = dislike_weight * feature_vectors[recipe_id]
-                else:
-                    preference_vector += dislike_weight * feature_vectors[recipe_id]
+                vector = feature_vectors[recipe_id]
+                # Validate vector before using
+                if (
+                    vector is not None
+                    and not np.any(np.isnan(vector))
+                    and not np.any(np.isinf(vector))
+                ):
+                    if preference_vector is None:
+                        preference_vector = dislike_weight * vector
+                    else:
+                        preference_vector += dislike_weight * vector
 
         # Normalize if we have a preference vector
-        if preference_vector is not None and np.linalg.norm(preference_vector) > 0:
-            preference_vector = preference_vector / np.linalg.norm(preference_vector)
+        if preference_vector is not None:
+            # Check for invalid values
+            if np.any(np.isnan(preference_vector)) or np.any(
+                np.isinf(preference_vector)
+            ):
+                logger.warning("Invalid preference vector computed")
+                return None
+
+            norm = np.linalg.norm(preference_vector)
+            if norm > 0:
+                preference_vector = preference_vector / norm
+            else:
+                logger.warning("Zero norm preference vector computed")
+                return None
 
         return preference_vector
 
@@ -347,7 +465,7 @@ class RecommendationEngine:
                 logger.info(
                     f"User {user_id} has no feedback, returning 10 random recipes"
                 )
-                return await self.get_random_recipes(
+                return self.get_random_recipes(
                     num_recipes=10, exclude_recipe_ids=seen_recipes
                 )
 
@@ -366,7 +484,7 @@ class RecommendationEngine:
 
             if user_preference_vector is None:
                 logger.error("Failed to compute user preference vector")
-                return await self.get_random_recipes(
+                return self.get_random_recipes(
                     num_recipes=num_recommendations, exclude_recipe_ids=seen_recipes
                 )
 

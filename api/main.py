@@ -5,7 +5,7 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from datetime import datetime
 import logging
-import sys
+from decimal import Decimal
 from recommendation_engine import RecommendationEngine
 from database import DatabaseManager
 from models import (
@@ -21,11 +21,62 @@ import json
 # Load environment variables
 load_dotenv()
 
-# Configure logging to avoid duplicates
+
+# ANSI color codes for terminal output
+class Colors:
+    BLUE = "\033[94m"
+    YELLOW = "\033[93m"
+    ORANGE = "\033[33m"
+    RED = "\033[91m"
+    BOLD = "\033[1m"
+    END = "\033[0m"
+
+
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter that adds colors to log levels"""
+
+    def format(self, record):
+        # Save the original format
+        original_format = self._style._fmt
+
+        # Add colors based on log level
+        if record.levelno >= logging.ERROR:
+            color = Colors.RED + Colors.BOLD
+            self._style._fmt = (
+                f"{color}%(levelname)s{Colors.END}: %(name)s: %(message)s"
+            )
+        elif record.levelno >= logging.WARNING:
+            color = Colors.YELLOW + Colors.BOLD
+            self._style._fmt = (
+                f"{color}%(levelname)s{Colors.END}: %(name)s: %(message)s"
+            )
+        elif record.levelno >= logging.INFO:
+            color = Colors.BLUE + Colors.BOLD
+            self._style._fmt = (
+                f"{color}%(levelname)s{Colors.END}: %(name)s: %(message)s"
+            )
+        else:
+            self._style._fmt = "%(levelname)s: %(name)s: %(message)s"
+
+        # Format the record
+        result = super().format(record)
+
+        # Restore the original format
+        self._style._fmt = original_format
+
+        return result
+
+
+# Configure logging with colors
 logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)s: %(name)s: %(message)s",
 )
+
+# Get the root logger and add our colored formatter
+root_logger = logging.getLogger()
+for handler in root_logger.handlers:
+    handler.setFormatter(ColoredFormatter())
 
 logger = logging.getLogger(__name__)
 
@@ -184,12 +235,14 @@ async def submit_feedback(
         await db.save_recommendations(user_id, rec_ids)
         next_rec = await db.get_recipe_by_id(rec_ids[0])
 
-        print(
-            "Next recommendation: \n",
-            json.dumps(
-                next_rec.dict() if hasattr(next_rec, "dict") else next_rec, indent=4
-            ),
-        )
+        # Convert recipe data to be JSON serializable
+        if hasattr(next_rec, "dict"):
+            recipe_data = next_rec.dict()
+        else:
+            recipe_data = next_rec
+
+        # Convert any Decimal objects to regular numbers
+        recipe_data = convert_decimals(recipe_data)
 
         return UserFeedbackResponse(
             message="Feedback submitted successfully",
@@ -213,26 +266,24 @@ async def get_recommendations(
     """Get personalized recipe recommendations for a user"""
     try:
         # Get recommendations from database or generate new ones
-        recommendations = await recommendation_engine.get_recommendations(
+        recommendation_ids = await recommendation_engine.get_recommendations(
             user_id,
             db,
             num_recommendations,
         )
 
         # Load the recipes from the database
-        recommendations = await db.get_recipes_by_ids(recommendations)
+        recommendations = await db.get_recipes_by_ids(recommendation_ids)
         recommendations = [Recipe(**rec) for rec in recommendations]
 
-        print(
-            "InitialRecommendations: \n",
-            json.dumps(
-                [
-                    rec.dict() if hasattr(rec, "dict") else rec
-                    for rec in recommendations
-                ],
-                indent=4,
-            ),
-        )
+        # Convert recipe data to be JSON serializable for printing
+        recommendations_data = []
+        for rec in recommendations:
+            if hasattr(rec, "dict"):
+                recipe_data = rec.dict()
+            else:
+                recipe_data = rec
+            recommendations_data.append(convert_decimals(recipe_data))
 
         return RecommendationResponse(
             user_id=user_id,
@@ -277,6 +328,18 @@ async def search_recipes(
     except Exception as e:
         logger.error(f"Error searching recipes: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+def convert_decimals(obj):
+    """Convert Decimal objects to regular numbers for JSON serialization"""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_decimals(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimals(item) for item in obj]
+    else:
+        return obj
 
 
 if __name__ == "__main__":
