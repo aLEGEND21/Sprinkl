@@ -35,16 +35,29 @@ def get_recipe_features(recipe):
     """Extract features from a recipe for similarity comparison"""
     features = []
 
-    # Add recipe name
-    if recipe["recipe_name"]:
-        features.append(clean_text(recipe["recipe_name"]))
+    # Add recipe title
+    if recipe["title"]:
+        features.append(clean_text(recipe["title"]))
+
+    # Add description
+    if recipe["description"]:
+        features.append(clean_text(recipe["description"]))
 
     # Add ingredients
-    if recipe["ingredient_list"]:
+    if recipe["ingredients"]:
         try:
-            ingredients = json.loads(recipe["ingredient_list"])
+            ingredients = json.loads(recipe["ingredients"])
             if isinstance(ingredients, list):
                 features.extend([clean_text(ing) for ing in ingredients])
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Add instructions
+    if recipe["instructions"]:
+        try:
+            instructions = json.loads(recipe["instructions"])
+            if isinstance(instructions, list):
+                features.extend([clean_text(inst) for inst in instructions])
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -52,11 +65,24 @@ def get_recipe_features(recipe):
     if recipe["cuisine"]:
         features.append(clean_text(recipe["cuisine"]))
 
+    # Add category
+    if recipe["category"]:
+        features.append(clean_text(recipe["category"]))
+
+    # Add keywords
+    if recipe["keywords"]:
+        try:
+            keywords = json.loads(recipe["keywords"])
+            if isinstance(keywords, list):
+                features.extend([clean_text(keyword) for keyword in keywords])
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     # Add cooking time category
-    if recipe["time_mins"]:
-        if recipe["time_mins"] <= 30:
+    if recipe["total_time"]:
+        if recipe["total_time"] <= 30:
             features.append("quick meal")
-        elif recipe["time_mins"] <= 60:
+        elif recipe["total_time"] <= 60:
             features.append("medium cook time")
         else:
             features.append("long cook time")
@@ -123,11 +149,15 @@ def main():
         print(f"Connected to MariaDB database: {DB_NAME}")
 
         # Fetch all recipes from the database
-        cursor.execute("""
-            SELECT id, recipe_name, ingredient_list, cuisine, time_mins, ingredient_count
+        cursor.execute(
+            """
+            SELECT id, title, description, recipe_url, image_url, ingredients, instructions,
+                   category, cuisine, site_name, keywords, dietary_restrictions,
+                   total_time, overall_rating
             FROM recipes 
-            WHERE recipe_name IS NOT NULL AND recipe_name != ''
-        """)
+            WHERE title IS NOT NULL AND title != ''
+        """
+        )
 
         recipes = cursor.fetchall()
 
@@ -145,26 +175,42 @@ def main():
         print("SELECTED RANDOM RECIPE:")
         print("=" * 60)
         print(f"ID: {target_recipe['id']}")
-        print(f"Name: {target_recipe['recipe_name']}")
+        print(f"Title: {target_recipe['title']}")
+        if target_recipe["description"]:
+            print(
+                f"Description: {target_recipe['description'][:100]}{'...' if len(target_recipe['description']) > 100 else ''}"
+            )
         print(f"Cuisine: {target_recipe['cuisine']}")
+        if target_recipe["category"]:
+            print(f"Category: {target_recipe['category']}")
+        if target_recipe["site_name"]:
+            print(f"Site: {target_recipe['site_name']}")
         print(
-            f"Cooking Time: {target_recipe['time_mins']} minutes"
-            if target_recipe["time_mins"]
-            else "Cooking Time: Not specified"
+            f"Total Time: {target_recipe['total_time']} minutes"
+            if target_recipe["total_time"]
+            else "Total Time: Not specified"
         )
-        print(
-            f"Ingredient Count: {target_recipe['ingredient_count']}"
-            if target_recipe["ingredient_count"]
-            else "Ingredient Count: Not specified"
-        )
+        if target_recipe["overall_rating"]:
+            print(f"Rating: {target_recipe['overall_rating']}/5.0")
 
         # Show ingredients
-        if target_recipe["ingredient_list"]:
+        if target_recipe["ingredients"]:
             try:
-                ingredients = json.loads(target_recipe["ingredient_list"])
+                ingredients = json.loads(target_recipe["ingredients"])
                 if isinstance(ingredients, list) and ingredients:
                     print(
                         f"Ingredients: {', '.join(ingredients[:5])}{'...' if len(ingredients) > 5 else ''}"
+                    )
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Show keywords
+        if target_recipe["keywords"]:
+            try:
+                keywords = json.loads(target_recipe["keywords"])
+                if isinstance(keywords, list) and keywords:
+                    print(
+                        f"Keywords: {', '.join(keywords[:5])}{'...' if len(keywords) > 5 else ''}"
                     )
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -178,26 +224,39 @@ def main():
         )
 
         print(f"\n{'=' * 60}")
-        print("TOP 10 MOST SIMILAR RECIPES:")
+        print("TOP 5 MOST SIMILAR RECIPES:")
         print("=" * 60)
 
         for i, (recipe, similarity_score) in enumerate(similar_recipes, 1):
-            print(f"\n{i}. {recipe['recipe_name']}")
+            print(f"\n{i}. {recipe['title']}")
             print(f"   ID: {recipe['id']}")
             print(f"   Similarity Score: {similarity_score:.4f}")
             print(f"   Cuisine: {recipe['cuisine']}")
-            if recipe["time_mins"]:
-                print(f"   Cooking Time: {recipe['time_mins']} minutes")
-            if recipe["ingredient_count"]:
-                print(f"   Ingredient Count: {recipe['ingredient_count']}")
+            if recipe["category"]:
+                print(f"   Category: {recipe['category']}")
+            if recipe["total_time"]:
+                print(f"   Total Time: {recipe['total_time']} minutes")
+            if recipe["overall_rating"]:
+                print(f"   Rating: {recipe['overall_rating']}/5.0")
 
             # Show some ingredients
-            if recipe["ingredient_list"]:
+            if recipe["ingredients"]:
                 try:
-                    ingredients = json.loads(recipe["ingredient_list"])
+                    ingredients = json.loads(recipe["ingredients"])
                     if isinstance(ingredients, list) and ingredients:
                         print(
                             f"   Key Ingredients: {', '.join(ingredients[:3])}{'...' if len(ingredients) > 3 else ''}"
+                        )
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # Show some keywords
+            if recipe["keywords"]:
+                try:
+                    keywords = json.loads(recipe["keywords"])
+                    if isinstance(keywords, list) and keywords:
+                        print(
+                            f"   Keywords: {', '.join(keywords[:3])}{'...' if len(keywords) > 3 else ''}"
                         )
                 except (json.JSONDecodeError, TypeError):
                     pass

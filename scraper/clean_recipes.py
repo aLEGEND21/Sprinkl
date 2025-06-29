@@ -17,6 +17,17 @@ for url, recipe in recipes.items():
 print(f"Replaced {count} images for Zestful Kitchen")
 
 
+# For Zestful Kitchen, combine all the instructions into a single string
+count = 0
+for url, recipe in recipes.items():
+    website = recipe.get("host")
+    instructions = recipe.get("instructions")
+    if website == "zestfulkitchen.com" and instructions:
+        recipe["instructions"] = "".join(instructions)
+        count += 1
+print(f"Combined {count} instructions for Zestful Kitchen")
+
+
 # Save the recipes
 with open("recipes.json", "w") as f:
     json.dump(recipes, f, indent=4)

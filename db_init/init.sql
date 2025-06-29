@@ -7,21 +7,25 @@ CREATE DATABASE IF NOT EXISTS foodapp_db;
 USE foodapp_db;
 
 -- 1. Recipes Table
--- Stores all the recipe information from your CSV dataset.
+-- Stores all the recipe information from your JSON dataset.
 -- 'id' will be a unique identifier for each recipe.
--- JSON types are used for 'cleaned_ingredients' and 'feature_vector' to store
+-- JSON types are used for 'ingredients', 'instructions', 'keywords', and 'feature_vector' to store
 -- structured array data that will be processed by your ML backend.
 CREATE TABLE IF NOT EXISTS recipes (
     id VARCHAR(255) PRIMARY KEY,
-    recipe_name VARCHAR(255) NOT NULL,
-    ingredient_measurements JSON, -- Stores each ingredient along with its measurement
-    time_mins INT,
-    cuisine VARCHAR(100),
-    instructions TEXT,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
     recipe_url TEXT,
-    ingredient_list JSON, -- Stores an array of all the ingredients used in the recipe
     image_url TEXT,
-    ingredient_count INT,
+    ingredients JSON, -- Stores an array of all the ingredients used in the recipe
+    instructions JSON, -- Stores an array of instruction steps
+    category VARCHAR(100),
+    cuisine VARCHAR(100),
+    site_name VARCHAR(100),
+    keywords JSON, -- Stores an array of keywords/tags
+    dietary_restrictions JSON, -- Stores dietary restrictions if any
+    total_time INT, -- Total time in minutes
+    overall_rating DECIMAL(3,2), -- Rating from 0.0 to 5.0
     feature_vector JSON -- Stores the numerical vector representation of the recipe for ML
 );
 
@@ -61,9 +65,11 @@ CREATE TABLE IF NOT EXISTS recommendations (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Optional: Create an index for faster lookup on recipes by image_url or cuisine if frequently queried
+-- Optional: Create an index for faster lookup on recipes by cuisine or category if frequently queried
 CREATE INDEX IF NOT EXISTS idx_recipes_cuisine ON recipes (cuisine);
-CREATE INDEX IF NOT EXISTS idx_recipes_meal_time ON recipes (time_mins); -- If you plan to filter by time
+CREATE INDEX IF NOT EXISTS idx_recipes_category ON recipes (category);
+CREATE INDEX IF NOT EXISTS idx_recipes_total_time ON recipes (total_time);
+CREATE INDEX IF NOT EXISTS idx_recipes_overall_rating ON recipes (overall_rating);
 
 -- Optional: Create an index on user_feedback for faster lookup by user_id
 CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id ON user_feedback (user_id);
