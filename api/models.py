@@ -1,4 +1,4 @@
-# types.py - Pydantic models and type definitions for the Food Recommendation API
+# models.py - Pydantic models and type definitions for the Food Recommendation API
 from pydantic import BaseModel
 from typing import List, Optional, Literal
 

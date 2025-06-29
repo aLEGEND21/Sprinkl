@@ -8,7 +8,7 @@ import logging
 import sys
 from recommendation_engine import RecommendationEngine
 from database import DatabaseManager
-from types import (
+from models import (
     UserLoginRequest,
     UserLoginResponse,
     UserFeedbackRequest,
