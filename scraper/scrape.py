@@ -70,13 +70,3 @@ finally:
     with open("recipes.json", "w") as f:
         json.dump(recipes, f, indent=4)
     driver.quit()
-
-
-"""
-The script above functions correctly but there is an unnecessary error at the end when the driver quits.
-
-TODO: Implement scraping for some other sites too.
-TODO: Update the database schema to store the scraped recipes.
-TODO: Update the API to properly handle the new recipes.
-TODO: Update frontend to display the new recipes.
-"""
