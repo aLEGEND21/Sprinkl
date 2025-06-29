@@ -1,343 +1,393 @@
-# recommendation_engine.py - AI-powered recipe recommendation engine
+#!/usr/bin/env python3
+"""
+Memory-Efficient Recommendation Engine using Database-Driven Similarity
+
+This module implements a memory-efficient recommendation engine that:
+- Loads recipes on-demand from the database
+- Computes similarities directly from stored feature vectors
+- Minimizes memory usage by not storing large datasets in memory
+- Uses efficient database queries for similarity computations
+"""
+
 import json
 import logging
-from typing import List, Dict, Optional
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
-import re
-from datetime import datetime, timedelta
+import pymysql
+import os
+from typing import List, Dict, Optional, Tuple
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import normalize
+from dotenv import load_dotenv
+import random
+
+# Load environment variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 
 class RecommendationEngine:
     def __init__(self):
-        self.vectorizer = None
-        self.recipe_features = None
-        self.recipe_similarity_matrix = None
-        self.recipes_cache = None
-        self.cache_expiry = None
+        self.db_config = {
+            "host": os.getenv("MARIADB_HOST", "localhost"),
+            "port": int(os.getenv("MARIADB_PORT", "3306")),
+            "user": os.getenv("MARIADB_USER", "root"),
+            "password": os.getenv("MARIADB_PASSWORD"),
+            "database": os.getenv("MARIADB_DATABASE", "foodapp_db"),
+            "charset": "utf8mb4",
+        }
 
-    def clean_text(self, text: str) -> str:
-        """Clean and normalize text for similarity comparison"""
-        if not text:
-            return ""
-        # Convert to lowercase and remove special characters
-        text = re.sub(r"[^a-zA-Z\s]", " ", str(text).lower())
-        # Remove extra whitespace
-        text = " ".join(text.split())
-        return text
+        # Cache for frequently accessed data (minimal memory usage)
+        self._recipe_count = None
+        self._recipe_ids_cache = set()
 
-    def extract_recipe_features(self, recipe: Dict) -> str:
-        """Extract features from a recipe for similarity comparison"""
-        features = []
+        logger.info("Memory-efficient recommendation engine initialized!")
 
-        # Add recipe name
-        if recipe.get("recipe_name"):
-            features.append(self.clean_text(recipe["recipe_name"]))
+    def _get_connection(self):
+        """Get a database connection"""
+        return pymysql.connect(**self.db_config)
 
-        # Add ingredients
-        if recipe.get("ingredient_list"):
+    def _get_recipe_count(self) -> int:
+        """Get total number of recipes with feature vectors"""
+        if self._recipe_count is None:
+            conn = self._get_connection()
+            cursor = conn.cursor()
             try:
-                if isinstance(recipe["ingredient_list"], str):
-                    ingredients = json.loads(recipe["ingredient_list"])
-                else:
-                    ingredients = recipe["ingredient_list"]
+                cursor.execute(
+                    "SELECT COUNT(*) FROM recipes WHERE feature_vector IS NOT NULL"
+                )
+                self._recipe_count = cursor.fetchone()[0]
+            finally:
+                cursor.close()
+                conn.close()
+        return self._recipe_count
 
-                if isinstance(ingredients, list):
-                    features.extend([self.clean_text(ing) for ing in ingredients])
-            except (json.JSONDecodeError, TypeError):
-                pass
+    def _get_recipe_ids(self) -> set:
+        """Get set of all recipe IDs with feature vectors"""
+        if not self._recipe_ids_cache:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    "SELECT id FROM recipes WHERE feature_vector IS NOT NULL"
+                )
+                self._recipe_ids_cache = {row[0] for row in cursor.fetchall()}
+            finally:
+                cursor.close()
+                conn.close()
+        return self._recipe_ids_cache
 
-        # Add cuisine
-        if recipe.get("cuisine"):
-            features.append(self.clean_text(recipe["cuisine"]))
-            # Add cuisine multiple times to increase its weight
-            features.append(self.clean_text(recipe["cuisine"]))
-
-        # Add cooking time category
-        if recipe.get("time_mins"):
-            time_mins = recipe["time_mins"]
-            if time_mins <= 30:
-                features.append("quick meal")
-            elif time_mins <= 60:
-                features.append("medium cook time")
-            else:
-                features.append("long cook time")
-
-        return " ".join(features)
-
-    async def build_similarity_matrix(self, db_manager):
-        """Build the recipe similarity matrix"""
+    def _get_recipe_feature_vector(self, recipe_id: str) -> Optional[np.ndarray]:
+        """Get feature vector for a specific recipe"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
         try:
-            logger.info("Building recipe similarity matrix...")
+            cursor.execute(
+                "SELECT feature_vector FROM recipes WHERE id = %s", (recipe_id,)
+            )
+            result = cursor.fetchone()
+            if result and result[0]:
+                feature_vector = json.loads(result[0])
+                return normalize(np.array([feature_vector]), norm="l2")[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error getting feature vector for recipe {recipe_id}: {e}")
+            return None
+        finally:
+            cursor.close()
+            conn.close()
 
-            # Get all recipes
-            recipes = await db_manager.search_recipes(limit=10000)  # Get all recipes
+    def _get_multiple_feature_vectors(
+        self, recipe_ids: List[str]
+    ) -> Dict[str, np.ndarray]:
+        """Get feature vectors for multiple recipes efficiently"""
+        if not recipe_ids:
+            return {}
 
-            if not recipes:
-                logger.warning("No recipes found in database")
-                return
-
-            # Extract features
-            recipe_texts = []
-            for recipe in recipes:
-                features = self.extract_recipe_features(recipe)
-                recipe_texts.append(features)
-
-            # Create TF-IDF vectors
-            self.vectorizer = TfidfVectorizer(
-                max_features=2000,
-                stop_words="english",
-                ngram_range=(1, 2),
-                min_df=1,
-                max_df=0.95,
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            # Create placeholders for the IN clause
+            placeholders = ",".join(["%s"] * len(recipe_ids))
+            cursor.execute(
+                f"SELECT id, feature_vector FROM recipes WHERE id IN ({placeholders})",
+                tuple(
+                    recipe_ids
+                ),  # Convert list to tuple for proper parameter expansion
             )
 
-            tfidf_matrix = self.vectorizer.fit_transform(recipe_texts)
+            vectors = {}
+            for row in cursor.fetchall():
+                recipe_id, feature_vector_json = row
+                if feature_vector_json:
+                    try:
+                        feature_vector = json.loads(feature_vector_json)
+                        vectors[recipe_id] = normalize(
+                            np.array([feature_vector]), norm="l2"
+                        )[0]
+                    except json.JSONDecodeError:
+                        continue
 
-            # Calculate cosine similarity
-            self.recipe_similarity_matrix = cosine_similarity(tfidf_matrix)
-            self.recipes_cache = recipes
-            self.cache_expiry = datetime.now() + timedelta(hours=6)  # Cache for 6 hours
-
-            logger.info(f"Similarity matrix built for {len(recipes)} recipes")
-
+            return vectors
         except Exception as e:
-            logger.error(f"Error building similarity matrix: {str(e)}")
+            logger.error(f"Error getting feature vectors: {e}")
+            return {}
+        finally:
+            cursor.close()
+            conn.close()
 
-    async def get_similar_recipes(
-        self, recipe_id: str, db_manager, num_similar: int = 10
-    ) -> List[str]:
-        """Get similar recipes to a given recipe"""
-        try:
-            # Check if we need to rebuild cache
-            if (
-                not self.recipes_cache
-                or not self.recipe_similarity_matrix
-                or not self.cache_expiry
-                or datetime.now() > self.cache_expiry
-            ):
-                await self.build_similarity_matrix(db_manager)
-
-            if not self.recipes_cache or not self.recipe_similarity_matrix:
-                return []
-
-            # Find the recipe index
-            recipe_index = None
-            for i, recipe in enumerate(self.recipes_cache):
-                if recipe["id"] == recipe_id:
-                    recipe_index = i
-                    break
-
-            if recipe_index is None:
-                return []
-
-            # Get similarity scores
-            similarity_scores = self.recipe_similarity_matrix[recipe_index]
-
-            # Get top similar recipes (excluding the recipe itself)
-            similar_indices = np.argsort(similarity_scores)[::-1][1 : num_similar + 1]
-
-            return [self.recipes_cache[i]["id"] for i in similar_indices]
-
-        except Exception as e:
-            logger.error(f"Error getting similar recipes: {str(e)}")
+    def _compute_similarity_batch(
+        self,
+        target_vector: np.ndarray,
+        recipe_ids: List[str],
+        exclude_recipe_ids: Optional[List[str]] = None,
+    ) -> List[Tuple[str, float]]:
+        """Compute similarity between target vector and a batch of recipes"""
+        if not recipe_ids:
             return []
 
-    async def get_content_based_recommendations(
+        # Get feature vectors for the batch
+        feature_vectors = self._get_multiple_feature_vectors(recipe_ids)
+        if not feature_vectors:
+            return []
+
+        # Convert to arrays for computation
+        vectors_array = np.array(list(feature_vectors.values()))
+        recipe_id_list = list(feature_vectors.keys())
+
+        # Compute similarities
+        similarities = cosine_similarity([target_vector], vectors_array)[0]
+
+        # Create results with exclusions
+        results = []
+        exclude_set = set(exclude_recipe_ids or [])
+
+        for i, recipe_id in enumerate(recipe_id_list):
+            if recipe_id not in exclude_set:
+                results.append((recipe_id, similarities[i]))
+
+        return results
+
+    async def get_random_recipes(
+        self, num_recipes: int = 5, exclude_recipe_ids: Optional[List[str]] = None
+    ) -> List[str]:
+        """Get random recipes efficiently"""
+        all_recipe_ids = self._get_recipe_ids()
+        exclude_set = set(exclude_recipe_ids or [])
+
+        # Filter out excluded recipes
+        available_ids = list(all_recipe_ids - exclude_set)
+
+        if len(available_ids) <= num_recipes:
+            return available_ids
+
+        return random.sample(available_ids, num_recipes)
+
+    def compute_user_preference_vector(
+        self,
+        liked_recipes: List[str],
+        disliked_recipes: List[str],
+        like_weight: float = 1.0,
+        dislike_weight: float = -0.5,
+    ) -> Optional[np.ndarray]:
+        """Compute user preference vector from liked/disliked recipes"""
+        if not liked_recipes and not disliked_recipes:
+            return None
+
+        # Get feature vectors for all user feedback recipes
+        all_feedback_ids = liked_recipes + disliked_recipes
+        feature_vectors = self._get_multiple_feature_vectors(all_feedback_ids)
+
+        if not feature_vectors:
+            return None
+
+        # Compute weighted preference vector
+        preference_vector = None
+
+        for recipe_id in liked_recipes:
+            if recipe_id in feature_vectors:
+                if preference_vector is None:
+                    preference_vector = like_weight * feature_vectors[recipe_id]
+                else:
+                    preference_vector += like_weight * feature_vectors[recipe_id]
+
+        for recipe_id in disliked_recipes:
+            if recipe_id in feature_vectors:
+                if preference_vector is None:
+                    preference_vector = dislike_weight * feature_vectors[recipe_id]
+                else:
+                    preference_vector += dislike_weight * feature_vectors[recipe_id]
+
+        # Normalize if we have a preference vector
+        if preference_vector is not None and np.linalg.norm(preference_vector) > 0:
+            preference_vector = preference_vector / np.linalg.norm(preference_vector)
+
+        return preference_vector
+
+    def find_similar_recipes(
+        self,
+        preference_vector: np.ndarray,
+        num_recipes: int = 20,
+        exclude_recipe_ids: Optional[List[str]] = None,
+        batch_size: int = 1000,
+    ) -> List[Tuple[str, float, Dict]]:
+        """Find recipes similar to preference vector using batched computation"""
+        if preference_vector is None:
+            return []
+
+        all_recipe_ids = list(self._get_recipe_ids())
+        exclude_set = set(exclude_recipe_ids or [])
+
+        # Filter out excluded recipes
+        available_ids = [rid for rid in all_recipe_ids if rid not in exclude_set]
+
+        if not available_ids:
+            return []
+
+        # Process in batches to manage memory
+        all_similarities = []
+
+        for i in range(0, len(available_ids), batch_size):
+            batch_ids = available_ids[i : i + batch_size]
+            batch_similarities = self._compute_similarity_batch(
+                preference_vector, batch_ids, exclude_recipe_ids
+            )
+            all_similarities.extend(batch_similarities)
+
+        # Sort by similarity and get top results
+        all_similarities.sort(key=lambda x: x[1], reverse=True)
+        top_similarities = all_similarities[:num_recipes]
+
+        # Get recipe data for top results
+        top_recipe_ids = [recipe_id for recipe_id, _ in top_similarities]
+        recipe_data = self._get_recipe_data(top_recipe_ids)
+
+        # Combine results
+        results = []
+        for recipe_id, similarity_score in top_similarities:
+            recipe_info = recipe_data.get(recipe_id, {})
+            results.append((recipe_id, similarity_score, recipe_info))
+
+        return results
+
+    def _get_recipe_data(self, recipe_ids: List[str]) -> Dict[str, Dict]:
+        """Get basic recipe data for given IDs"""
+        if not recipe_ids:
+            return {}
+
+        conn = self._get_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        try:
+            placeholders = ",".join(["%s"] * len(recipe_ids))
+            cursor.execute(
+                f"""
+                SELECT id, title, description, recipe_url, image_url, ingredients, instructions,
+                       category, cuisine, site_name, keywords, dietary_restrictions,
+                       total_time, overall_rating
+                FROM recipes 
+                WHERE id IN ({placeholders})
+                """,
+                tuple(
+                    recipe_ids
+                ),  # Convert list to tuple for proper parameter expansion
+            )
+
+            recipes = {}
+            for row in cursor.fetchall():
+                # Parse JSON fields
+                if row["ingredients"]:
+                    try:
+                        row["ingredients"] = json.loads(row["ingredients"])
+                    except json.JSONDecodeError:
+                        row["ingredients"] = []
+
+                if row["instructions"]:
+                    try:
+                        row["instructions"] = json.loads(row["instructions"])
+                    except json.JSONDecodeError:
+                        row["instructions"] = []
+
+                if row["keywords"]:
+                    try:
+                        row["keywords"] = json.loads(row["keywords"])
+                    except json.JSONDecodeError:
+                        row["keywords"] = []
+
+                if row["dietary_restrictions"]:
+                    try:
+                        row["dietary_restrictions"] = json.loads(
+                            row["dietary_restrictions"]
+                        )
+                    except json.JSONDecodeError:
+                        row["dietary_restrictions"] = []
+
+                recipes[row["id"]] = row
+
+            return recipes
+        except Exception as e:
+            logger.error(f"Error getting recipe data: {e}")
+            return {}
+        finally:
+            cursor.close()
+            conn.close()
+
+    async def get_recommendations(
         self, user_id: str, db_manager, num_recommendations: int = 20
     ) -> List[str]:
-        """Generate content-based recommendations based on user's liked recipes"""
+        """Generate recommendations using memory-efficient approach"""
         try:
             # Get user feedback
             feedback = await db_manager.get_user_feedback(user_id)
             liked_recipes = feedback.get("liked", [])
             disliked_recipes = feedback.get("disliked", [])
+            seen_recipes = liked_recipes + disliked_recipes
 
-            if not liked_recipes:
-                # If no likes, return popular recipes (high ingredient count or certain cuisines)
-                recipes = await db_manager.search_recipes(limit=num_recommendations)
-                return [recipe["id"] for recipe in recipes]
-
-            # Get similar recipes for each liked recipe
-            all_similar_recipes = []
-            for liked_recipe_id in liked_recipes[-5:]:  # Consider last 5 liked recipes
-                similar_recipes = await self.get_similar_recipes(
-                    liked_recipe_id, db_manager, 10
-                )
-                all_similar_recipes.extend(similar_recipes)
-
-            # Remove duplicates and disliked recipes
-            unique_recommendations = []
-            seen = set(liked_recipes + disliked_recipes)
-
-            for recipe_id in all_similar_recipes:
-                if recipe_id not in seen:
-                    unique_recommendations.append(recipe_id)
-                    seen.add(recipe_id)
-
-                if len(unique_recommendations) >= num_recommendations:
-                    break
-
-            # If we don't have enough recommendations, add some popular ones
-            if len(unique_recommendations) < num_recommendations:
-                additional_recipes = await db_manager.search_recipes(
-                    limit=num_recommendations - len(unique_recommendations)
-                )
-                for recipe in additional_recipes:
-                    if recipe["id"] not in seen:
-                        unique_recommendations.append(recipe["id"])
-                        if len(unique_recommendations) >= num_recommendations:
-                            break
-
-            return unique_recommendations
-
-        except Exception as e:
-            logger.error(f"Error generating content-based recommendations: {str(e)}")
-            return []
-
-    async def get_cuisine_based_recommendations(
-        self, user_id: str, db_manager, num_recommendations: int = 10
-    ) -> List[str]:
-        """Generate recommendations based on user's preferred cuisines"""
-        try:
-            # Get user stats to find favorite cuisines
-            stats = await db_manager.get_user_stats(user_id)
-            favorite_cuisines = stats.get("favorite_cuisines", [])
-
-            if not favorite_cuisines:
-                return []
-
-            recommendations = []
-            feedback = await db_manager.get_user_feedback(user_id)
-            excluded_recipes = set(
-                feedback.get("liked", []) + feedback.get("disliked", [])
-            )
-
-            # Get recipes from favorite cuisines
-            for cuisine_data in favorite_cuisines[:3]:  # Top 3 cuisines
-                cuisine = cuisine_data["cuisine"]
-                cuisine_recipes = await db_manager.search_recipes(
-                    cuisine=cuisine, limit=num_recommendations
-                )
-
-                for recipe in cuisine_recipes:
-                    if (
-                        recipe["id"] not in excluded_recipes
-                        and recipe["id"] not in recommendations
-                    ):
-                        recommendations.append(recipe["id"])
-                        if len(recommendations) >= num_recommendations:
-                            break
-
-                if len(recommendations) >= num_recommendations:
-                    break
-
-            return recommendations
-
-        except Exception as e:
-            logger.error(f"Error generating cuisine-based recommendations: {str(e)}")
-            return []
-
-    async def generate_fresh_recommendations(
-        self, user_id: str, db_manager
-    ) -> List[Dict]:
-        """Generate fresh recommendations using multiple strategies"""
-        try:
-            # Generate recommendations using different strategies
-            content_recs = await self.get_content_based_recommendations(
-                user_id, db_manager, 15
-            )
-            cuisine_recs = await self.get_cuisine_based_recommendations(
-                user_id, db_manager, 10
-            )
-
-            # Combine and deduplicate
-            all_recommendations = content_recs + cuisine_recs
-            unique_recommendations = []
-            seen = set()
-
-            for recipe_id in all_recommendations:
-                if recipe_id not in seen:
-                    unique_recommendations.append(recipe_id)
-                    seen.add(recipe_id)
-                    if len(unique_recommendations) >= 20:
-                        break
-
-            # Save recommendations to database
-            await db_manager.save_recommendations(user_id, unique_recommendations)
-
-            # Get full recipe details
-            recommendations = []
-            for recipe_id in unique_recommendations:
-                recipe = await db_manager.get_recipe_by_id(recipe_id)
-                if recipe:
-                    recommendations.append(recipe)
-
-            return recommendations
-
-        except Exception as e:
-            logger.error(f"Error generating fresh recommendations: {str(e)}")
-            return []
-
-    async def get_recommendations(
-        self,
-        user_id: str,
-        db_manager,
-        num_recommendations: int = 10,
-        cuisine_filter: Optional[str] = None,
-        max_time_mins: Optional[int] = None,
-    ) -> List[Dict]:
-        """Get recommendations for a user, using cached if available"""
-        try:
-            # Try to get saved recommendations first
-            saved_recipe_ids = await db_manager.get_saved_recommendations(user_id)
-
-            # If no saved recommendations or they're stale, generate fresh ones
-            if not saved_recipe_ids:
+            # If user has no feedback, return random recipes
+            if not liked_recipes and not disliked_recipes:
                 logger.info(
-                    f"No saved recommendations for user {user_id}, generating fresh ones"
+                    f"User {user_id} has no feedback, returning 10 random recipes"
                 )
-                return await self.generate_fresh_recommendations(user_id, db_manager)
+                return await self.get_random_recipes(
+                    num_recipes=10, exclude_recipe_ids=seen_recipes
+                )
 
-            # Get full recipe details
-            recommendations = []
-            for recipe_id in saved_recipe_ids:
-                recipe = await db_manager.get_recipe_by_id(recipe_id)
-                if recipe:
-                    # Apply filters
-                    if cuisine_filter and recipe.get("cuisine") != cuisine_filter:
-                        continue
-                    if (
-                        max_time_mins
-                        and recipe.get("time_mins")
-                        and recipe["time_mins"] > max_time_mins
-                    ):
-                        continue
+            # Compute user preference vector
+            logger.info(
+                f"User {user_id} has {len(liked_recipes)} likes and {len(disliked_recipes)} dislikes"
+            )
+            logger.info("Computing user preference vector...")
 
-                    recommendations.append(recipe)
+            user_preference_vector = self.compute_user_preference_vector(
+                liked_recipes=liked_recipes,
+                disliked_recipes=disliked_recipes,
+                like_weight=1.0,
+                dislike_weight=-0.5,
+            )
 
-                    if len(recommendations) >= num_recommendations:
-                        break
+            if user_preference_vector is None:
+                logger.error("Failed to compute user preference vector")
+                return await self.get_random_recipes(
+                    num_recipes=num_recommendations, exclude_recipe_ids=seen_recipes
+                )
 
-            # If filters eliminated too many recommendations, generate fresh ones
-            if len(recommendations) < num_recommendations // 2:
-                return await self.generate_fresh_recommendations(user_id, db_manager)
+            # Find similar recipes
+            logger.info("Finding recipes similar to user preference vector...")
+            similar_recipes = self.find_similar_recipes(
+                preference_vector=user_preference_vector,
+                num_recipes=num_recommendations,
+                exclude_recipe_ids=seen_recipes,
+            )
 
-            return recommendations
+            # Extract recipe IDs
+            recommended_recipe_ids = [
+                recipe_id for recipe_id, _, _ in similar_recipes[:num_recommendations]
+            ]
+
+            logger.info(
+                f"Generated {len(recommended_recipe_ids)} recommendations for user {user_id}"
+            )
+            return recommended_recipe_ids
 
         except Exception as e:
-            logger.error(f"Error getting recommendations: {str(e)}")
+            logger.error(f"Error getting recommendations: {e}")
             return []
-
-    async def update_user_recommendations(self, user_id: str, db_manager):
-        """Update recommendations when user provides feedback"""
-        try:
-            # Generate fresh recommendations
-            await self.generate_fresh_recommendations(user_id, db_manager)
-            logger.info(f"Updated recommendations for user {user_id}")
-
-        except Exception as e:
-            logger.error(f"Error updating user recommendations: {str(e)}")

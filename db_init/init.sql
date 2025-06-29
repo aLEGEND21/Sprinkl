@@ -7,10 +7,10 @@ CREATE DATABASE IF NOT EXISTS foodapp_db;
 USE foodapp_db;
 
 -- 1. Recipes Table
--- Stores all the recipe information from your JSON dataset.
+-- Stores all the recipe information from the JSON dataset.
 -- 'id' will be a unique identifier for each recipe.
 -- JSON types are used for 'ingredients', 'instructions', 'keywords', and 'feature_vector' to store
--- structured array data that will be processed by your ML backend.
+-- structured array data that will be processed by the ML backend.
 CREATE TABLE IF NOT EXISTS recipes (
     id VARCHAR(255) PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS user_feedback (
 );
 
 -- 4. Recommendations Table
--- Stores pre-calculated recommendations for each user. Your ML API will update this table.
+-- Stores pre-calculated recommendations for each user. The ML API will update this table.
 -- 'recommended_recipe_ids' stores an ordered JSON array of recipe IDs.
 CREATE TABLE IF NOT EXISTS recommendations (
     user_id VARCHAR(255) PRIMARY KEY,
@@ -65,15 +65,15 @@ CREATE TABLE IF NOT EXISTS recommendations (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Optional: Create an index for faster lookup on recipes by cuisine or category if frequently queried
+-- Create an index for faster lookup on recipes
 CREATE INDEX IF NOT EXISTS idx_recipes_cuisine ON recipes (cuisine);
 CREATE INDEX IF NOT EXISTS idx_recipes_category ON recipes (category);
 CREATE INDEX IF NOT EXISTS idx_recipes_total_time ON recipes (total_time);
 CREATE INDEX IF NOT EXISTS idx_recipes_overall_rating ON recipes (overall_rating);
 
--- Optional: Create an index on user_feedback for faster lookup by user_id
+-- Create an index on user_feedback for faster lookup by user_id
 CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id ON user_feedback (user_id);
 
--- Optional: Create indexes for users table
+-- Create indexes for users table
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at);

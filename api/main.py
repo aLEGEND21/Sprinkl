@@ -1,19 +1,32 @@
 # main.py - FastAPI application for recipe recommendations
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from dotenv import load_dotenv
 from datetime import datetime
 import logging
+import sys
 from recommendation_engine import RecommendationEngine
 from database import DatabaseManager
+from types import (
+    UserLoginRequest,
+    UserLoginResponse,
+    UserFeedbackRequest,
+    UserFeedbackResponse,
+    Recipe,
+    RecommendationResponse,
+)
+import json
 
 # Load environment variables
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging to avoid duplicates
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: %(name)s: %(message)s",
+)
+
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
@@ -36,63 +49,6 @@ app.add_middleware(
 recommendation_engine = RecommendationEngine()
 
 
-# Pydantic models for request/response
-class UserLoginRequest(BaseModel):
-    user_id: str
-    email: str
-    name: str
-    image: Optional[str] = None
-
-
-class UserLoginResponse(BaseModel):
-    user_id: str
-    email: str
-    name: str
-    is_new_user: bool
-    message: str
-    created_at: str
-
-
-class UserFeedbackRequest(BaseModel):
-    user_id: str
-    recipe_id: str
-    feedback_type: str  # 'like' or 'dislike'
-
-
-class RecommendationRequest(BaseModel):
-    user_id: str
-    num_recommendations: Optional[int] = 10
-    cuisine_filter: Optional[str] = None
-    max_time_mins: Optional[int] = None
-
-
-class Recipe(BaseModel):
-    id: str
-    recipe_name: str
-    cuisine: Optional[str]
-    time_mins: Optional[int]
-    ingredient_count: Optional[int]
-    ingredient_list: Optional[List[str]]
-    instructions: Optional[str]
-    recipe_url: Optional[str]
-    image_url: Optional[str]
-
-
-class RecommendationResponse(BaseModel):
-    user_id: str
-    recommendations: List[Recipe]
-    last_updated: str
-    total_recommendations: int
-
-
-class UserStats(BaseModel):
-    user_id: str
-    total_likes: int
-    total_dislikes: int
-    favorite_cuisines: List[Dict[str, Any]]
-    avg_cooking_time: Optional[float]
-
-
 # Database dependency
 def get_db():
     return DatabaseManager()
@@ -104,69 +60,104 @@ async def root():
     return {"message": "Food Recommendation API is running!", "status": "healthy"}
 
 
-@app.post("/api/users/login", response_model=UserLoginResponse)
-async def user_login(login_data: UserLoginRequest, db: DatabaseManager = Depends(get_db)):
-    """Handle user login and add user to database if they don't exist"""
+@app.get("/reset")
+async def reset_database(db: DatabaseManager = Depends(get_db)):
+    """Reset database tables - clears users, user_feedback, and recommendations tables"""
     try:
-        logger.info(f"Processing login for user: {login_data.user_id}")
-        
-        # Check if user already exists
-        existing_user = await db.get_user_by_id(login_data.user_id)
-        is_new_user = existing_user is None
-        
-        if is_new_user:
-            # Create new user
-            logger.info(f"Creating new user: {login_data.user_id}")
-            success = await db.create_user(
-                user_id=login_data.user_id,
-                email=login_data.email,
-                name=login_data.name,
-                image_url=login_data.image,
-            )
-            
-            if not success:
-                raise HTTPException(status_code=500, detail="Failed to create user in database")
-            
-            # Generate initial recommendations for new user
-            try:
-                await recommendation_engine.generate_fresh_recommendations(login_data.user_id, db)
-                logger.info(f"Generated initial recommendations for new user: {login_data.user_id}")
-            except Exception as e:
-                logger.warning(f"Failed to generate initial recommendations for user {login_data.user_id}: {str(e)}")
-                # Don't fail the login if recommendation generation fails
-        else:
-            # Update existing user information
-            logger.info(f"Updating existing user: {login_data.user_id}")
-            success = await db.update_user(
-                user_id=login_data.user_id,
-                email=login_data.email,
-                name=login_data.name,
-                image_url=login_data.image,
-            )
-            
-            if not success:
-                logger.warning(f"Failed to update user {login_data.user_id}, but continuing with login")
-        
-        # Log successful login
-        logger.info(f"User login successful: {login_data.user_id} (new user: {is_new_user})")
-        
-        return UserLoginResponse(
-            user_id=login_data.user_id,
-            email=login_data.email,
-            name=login_data.name,
-            is_new_user=is_new_user,
-            message="Login successful" if not is_new_user else "User created and login successful",
-            created_at=datetime.now().isoformat()
-        )
-        
-    except HTTPException:
-        raise
+        logger.info("Resetting database tables...")
+
+        conn = db.get_connection()
+        cursor = conn.cursor()
+
+        # Clear tables in the correct order to respect foreign key constraints
+        # Start with tables that reference others
+        cursor.execute("DELETE FROM recommendations")
+        logger.info("Cleared recommendations table")
+
+        cursor.execute("DELETE FROM user_feedback")
+        logger.info("Cleared user_feedback table")
+
+        cursor.execute("DELETE FROM users")
+        logger.info("Cleared users table")
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        logger.info("Database reset completed successfully")
+        return {
+            "message": "Database reset successful",
+            "tables_cleared": ["recommendations", "user_feedback", "users"],
+            "timestamp": datetime.now().isoformat(),
+        }
+
     except Exception as e:
-        logger.error(f"Error processing user login: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.error(f"Error resetting database: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to reset database: {str(e)}"
+        )
 
 
-@app.post("/users/{user_id}/feedback", response_model=dict)
+@app.get("/counts")
+async def get_table_counts(db: DatabaseManager = Depends(get_db)):
+    """Get row counts for all tables in the database"""
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+
+        counts = {}
+
+        # Get count for each table
+        tables = ["recipes", "users", "user_feedback", "recommendations"]
+
+        for table in tables:
+            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            count = cursor.fetchone()[0]
+            counts[table] = count
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "table_counts": counts,
+            "total_records": sum(counts.values()),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting table counts: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get table counts: {str(e)}"
+        )
+
+
+@app.post("/api/users/login", response_model=UserLoginResponse)
+async def user_login(
+    login_data: UserLoginRequest, db: DatabaseManager = Depends(get_db)
+):
+    """Add the user to the database if they don't exist and load their initial recommendations."""
+
+    # Create the user account in the database
+    await db.create_user_if_not_exists(
+        user_id=login_data.user_id,
+        email=login_data.email,
+        name=login_data.name,
+        image_url=login_data.image,
+    )
+
+    # Load the user's initial recommendations
+    recs = await recommendation_engine.get_recommendations(login_data.user_id, db)
+    await db.save_recommendations(login_data.user_id, recs)
+
+    return UserLoginResponse(
+        user_id=login_data.user_id,
+        email=login_data.email,
+        name=login_data.name,
+        message="Login successful",
+    )
+
+
+@app.post("/users/{user_id}/feedback", response_model=UserFeedbackResponse)
 async def submit_feedback(
     user_id: str, feedback: UserFeedbackRequest, db: DatabaseManager = Depends(get_db)
 ):
@@ -178,9 +169,6 @@ async def submit_feedback(
                 status_code=400, detail="Feedback type must be 'like' or 'dislike'"
             )
 
-        # Ensure user exists
-        await db.ensure_user_exists(user_id)
-
         # Submit feedback
         success = await db.submit_feedback(
             user_id, feedback.recipe_id, feedback.feedback_type
@@ -189,15 +177,27 @@ async def submit_feedback(
         if not success:
             raise HTTPException(status_code=500, detail="Failed to submit feedback")
 
-        # Trigger recommendation update
-        await recommendation_engine.update_user_recommendations(user_id, db)
+        # Get the next recommendation for the user
+        rec_ids = await recommendation_engine.get_recommendations(
+            user_id, db, num_recommendations=1
+        )
+        await db.save_recommendations(user_id, rec_ids)
+        next_rec = await db.get_recipe_by_id(rec_ids[0])
 
-        return {
-            "message": "Feedback submitted successfully",
-            "user_id": user_id,
-            "recipe_id": feedback.recipe_id,
-            "feedback_type": feedback.feedback_type,
-        }
+        print(
+            "Next recommendation: \n",
+            json.dumps(
+                next_rec.dict() if hasattr(next_rec, "dict") else next_rec, indent=4
+            ),
+        )
+
+        return UserFeedbackResponse(
+            message="Feedback submitted successfully",
+            user_id=user_id,
+            recipe_id=feedback.recipe_id,
+            feedback_type=feedback.feedback_type,
+            next_recommendation=Recipe(**next_rec),
+        )
 
     except Exception as e:
         logger.error(f"Error submitting feedback: {str(e)}")
@@ -208,18 +208,30 @@ async def submit_feedback(
 async def get_recommendations(
     user_id: str,
     num_recommendations: Optional[int] = 10,
-    cuisine_filter: Optional[str] = None,
-    max_time_mins: Optional[int] = None,
     db: DatabaseManager = Depends(get_db),
 ):
     """Get personalized recipe recommendations for a user"""
     try:
-        # Ensure user exists
-        await db.ensure_user_exists(user_id)
-
         # Get recommendations from database or generate new ones
         recommendations = await recommendation_engine.get_recommendations(
-            user_id, db, num_recommendations, cuisine_filter, max_time_mins
+            user_id,
+            db,
+            num_recommendations,
+        )
+
+        # Load the recipes from the database
+        recommendations = await db.get_recipes_by_ids(recommendations)
+        recommendations = [Recipe(**rec) for rec in recommendations]
+
+        print(
+            "InitialRecommendations: \n",
+            json.dumps(
+                [
+                    rec.dict() if hasattr(rec, "dict") else rec
+                    for rec in recommendations
+                ],
+                indent=4,
+            ),
         )
 
         return RecommendationResponse(
@@ -231,18 +243,6 @@ async def get_recommendations(
 
     except Exception as e:
         logger.error(f"Error getting recommendations: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-
-@app.get("/users/{user_id}/stats", response_model=UserStats)
-async def get_user_stats(user_id: str, db: DatabaseManager = Depends(get_db)):
-    """Get user statistics and preferences"""
-    try:
-        stats = await db.get_user_stats(user_id)
-        return stats
-
-    except Exception as e:
-        logger.error(f"Error getting user stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
@@ -265,13 +265,13 @@ async def get_recipe(recipe_id: str, db: DatabaseManager = Depends(get_db)):
 async def search_recipes(
     query: Optional[str] = None,
     cuisine: Optional[str] = None,
-    max_time_mins: Optional[int] = None,
+    max_time: Optional[int] = None,
     limit: Optional[int] = 20,
     db: DatabaseManager = Depends(get_db),
 ):
     """Search recipes with optional filters"""
     try:
-        recipes = await db.search_recipes(query, cuisine, max_time_mins, limit)
+        recipes = await db.search_recipes(query, cuisine, max_time, limit)
         return recipes
 
     except Exception as e:
@@ -279,30 +279,7 @@ async def search_recipes(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-@app.post("/users/{user_id}/recommendations/refresh")
-async def refresh_recommendations(user_id: str, db: DatabaseManager = Depends(get_db)):
-    """Manually refresh recommendations for a user"""
-    try:
-        # Ensure user exists
-        await db.ensure_user_exists(user_id)
-
-        # Force refresh recommendations
-        recommendations = await recommendation_engine.generate_fresh_recommendations(
-            user_id, db
-        )
-
-        return {
-            "message": "Recommendations refreshed successfully",
-            "user_id": user_id,
-            "new_recommendations_count": len(recommendations),
-        }
-
-    except Exception as e:
-        logger.error(f"Error refreshing recommendations: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=3009)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

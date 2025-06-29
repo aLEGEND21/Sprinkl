@@ -1,8 +1,8 @@
-fastapi
-uvicorn
-pymysql
-python-dotenv
-scikit-learn
-numpy
+fastapi[standard]
+uvicorn[standard]
 pydantic
+python-dotenv
+pymysql
+numpy
+scikit-learn
 python-multipart
