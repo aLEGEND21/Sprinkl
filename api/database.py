@@ -213,7 +213,9 @@ class DatabaseManager:
         conn.close()
         return True
 
-    async def get_saved_recommendations(self, user_id: str) -> List[str]:
+    async def get_saved_recommendations(
+        self, user_id: str, count: int = 10
+    ) -> List[str]:
         """Get saved recommendations for a user"""
         conn = self.get_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -233,7 +235,8 @@ class DatabaseManager:
 
         if result and result["recommended_recipe_ids"]:
             try:
-                return json.loads(result["recommended_recipe_ids"])
+                recommendations = json.loads(result["recommended_recipe_ids"])
+                return recommendations[:count]
             except json.JSONDecodeError:
                 return []
 

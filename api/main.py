@@ -196,10 +196,6 @@ async def user_login(
         image_url=login_data.image,
     )
 
-    # Load the user's initial recommendations
-    recs = await recommendation_engine.get_recommendations(login_data.user_id, db)
-    await db.save_recommendations(login_data.user_id, recs)
-
     return UserLoginResponse(
         user_id=login_data.user_id,
         email=login_data.email,
@@ -265,25 +261,22 @@ async def get_recommendations(
 ):
     """Get personalized recipe recommendations for a user"""
     try:
-        # Get recommendations from database or generate new ones
-        recommendation_ids = await recommendation_engine.get_recommendations(
-            user_id,
-            db,
-            num_recommendations,
+        # Load the saved recommendations from the database
+        recommendation_ids = await db.get_saved_recommendations(
+            user_id, num_recommendations
         )
 
-        # Load the recipes from the database
+        if not recommendation_ids:
+            # If no saved recommendations, generate new ones
+            recommendation_ids = await recommendation_engine.get_recommendations(
+                user_id, db, num_recommendations
+            )
+            # Save the new recommendations
+            await db.save_recommendations(user_id, recommendation_ids)
+
+        # Load the full recipe data
         recommendations = await db.get_recipes_by_ids(recommendation_ids)
         recommendations = [Recipe(**rec) for rec in recommendations]
-
-        # Convert recipe data to be JSON serializable for printing
-        recommendations_data = []
-        for rec in recommendations:
-            if hasattr(rec, "dict"):
-                recipe_data = rec.dict()
-            else:
-                recipe_data = rec
-            recommendations_data.append(convert_decimals(recipe_data))
 
         return RecommendationResponse(
             user_id=user_id,
