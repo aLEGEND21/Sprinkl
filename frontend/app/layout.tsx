@@ -1,3 +1,4 @@
+import { BottomNavigation } from "@/components/bottom-navigation";
 import { Toaster } from "@/components/ui/sonner";
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
@@ -20,14 +21,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} antialiased`}
-        suppressHydrationWarning={true}
-      >
+    <html lang="en" suppressHydrationWarning={true}>
+      <body className={`${geistSans.variable} antialiased`}>
         <Providers>
           {children}
-          <Toaster />
+          <BottomNavigation />
+          <Toaster position="top-right" richColors />
         </Providers>
       </body>
     </html>

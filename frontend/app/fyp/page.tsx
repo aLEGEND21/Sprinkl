@@ -189,7 +189,7 @@ export default function FYP() {
   }
 
   return (
-    <div className="min-h-screen px-4 py-8">
+    <div className="min-h-screen px-4 pt-8 pb-28">
       <RecipeCard
         recipe={currentRecipe}
         onSwipe={handleSwipe}
