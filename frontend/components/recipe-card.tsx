@@ -102,7 +102,7 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
                   alt={recipe.title!}
                   width={400}
                   height={300}
-                  className="h-64 w-full rounded-t-lg object-cover"
+                  className="h-96 w-full rounded-t-lg object-cover"
                   draggable={false}
                 />
                 <Button
