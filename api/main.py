@@ -205,6 +205,7 @@ async def submit_feedback(
         success = await db.submit_feedback(
             user_id, feedback.recipe_id, feedback.feedback_type
         )
+        await db.remove_recommendation(user_id, feedback.recipe_id)
 
         if not success:
             raise HTTPException(status_code=500, detail="Failed to submit feedback")

@@ -14,6 +14,10 @@ export default function FYP() {
 
   // Current recipe should always be the first recipe in the recommendations array
   useEffect(() => {
+    console.log(
+      `Recommendations has been updated and is now ${recommendations.length} recipes long`,
+    );
+    console.log(recommendations);
     if (recommendations.length > 0) {
       setCurrentRecipe(recommendations[0]);
     } else {
@@ -35,7 +39,8 @@ export default function FYP() {
 
       if (response.ok) {
         const data: RecommendationResponse = await response.json();
-        setRecommendations(data.recommendations || []);
+        setRecommendations(data.recommendations);
+        console.log(data);
         if (data.recommendations && data.recommendations.length > 0) {
           setCurrentRecipe(data.recommendations[0]);
         } else {
@@ -79,14 +84,12 @@ export default function FYP() {
         throw new Error("Failed to submit feedback");
       }
 
-      // Remove the old recipe from the recommendations and add the new one
+      // Add the new recipe to the end of the recommendations array
       const data: UserFeedbackResponse = await response.json();
       setRecommendations((prev) => {
-        const newRecommendations = [...prev];
-        newRecommendations.shift();
-        newRecommendations.push(data.next_recommendation);
-        return newRecommendations;
+        return [...prev, data.next_recommendation];
       });
+      console.log(`Added ${data.next_recommendation.title} to recommendations`);
     } catch (error) {
       toast.error("Error", {
         description: "Failed to submit feedback",
@@ -95,12 +98,16 @@ export default function FYP() {
   };
 
   const handleSwipe = async (swipe: "like" | "dislike") => {
+    console.log(`Handling swipe for ${currentRecipe?.title}`);
     if (!currentRecipe) return;
 
-    setLoading(true);
     try {
-      // Submit feedback to backend
-      await submitFeedback(currentRecipe.id, swipe);
+      // Submit feedback to backend and remove the current recipe from the recommendations array
+      submitFeedback(currentRecipe.id, swipe);
+      setRecommendations((prev) => {
+        return prev.filter((recipe) => recipe.id !== currentRecipe.id);
+      });
+      console.log(`Removed ${currentRecipe.title} from recommendations`);
 
       if (swipe === "like") {
         toast("Recipe liked!", {
@@ -111,8 +118,6 @@ export default function FYP() {
       toast.error("Error", {
         description: "Failed to process swipe",
       });
-    } finally {
-      setLoading(false);
     }
   };
 

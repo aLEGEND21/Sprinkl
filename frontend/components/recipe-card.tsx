@@ -37,6 +37,7 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
       onSwipe(action);
       setIsAnimating(false);
       setSwipeDirection(null);
+      setExpanded(false);
     }, 300);
   };
 
@@ -182,7 +183,8 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
                   )}
                   {typeof recipe.overall_rating === "number" && (
                     <Badge variant="secondary" className="text-xs">
-                      ⭐ {recipe.overall_rating.toFixed(1)}
+                      <span className="mr-0.75">⭐</span>
+                      {recipe.overall_rating.toFixed(1)}
                     </Badge>
                   )}
                 </div>

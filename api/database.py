@@ -190,28 +190,123 @@ class DatabaseManager:
 
         return recipes
 
-    async def save_recommendations(self, user_id: str, recipe_ids: List[str]) -> bool:
-        """Save recommendations to the database"""
+    async def save_recommendations(
+        self, user_id: str, new_recipe_ids: List[str]
+    ) -> bool:
+        """Append new recommendations to existing ones"""
         conn = self.get_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        recommendations_json = json.dumps(recipe_ids)
+        try:
+            # Get existing recommendations
+            cursor.execute(
+                """
+                SELECT recommended_recipe_ids
+                FROM recommendations 
+                WHERE user_id = %s
+            """,
+                (user_id,),
+            )
 
-        cursor.execute(
-            """
-            INSERT INTO recommendations (user_id, recommended_recipe_ids, last_updated)
-            VALUES (%s, %s, %s)
-            ON DUPLICATE KEY UPDATE 
-            recommended_recipe_ids = VALUES(recommended_recipe_ids),
-            last_updated = VALUES(last_updated)
-        """,
-            (user_id, recommendations_json, datetime.now()),
-        )
+            result = cursor.fetchone()
+            existing_recommendations = []
 
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True
+            if result and result["recommended_recipe_ids"]:
+                try:
+                    existing_recommendations = json.loads(
+                        result["recommended_recipe_ids"]
+                    )
+                except json.JSONDecodeError:
+                    existing_recommendations = []
+
+            # Append new recommendations (avoid duplicates)
+            for recipe_id in new_recipe_ids:
+                if recipe_id not in existing_recommendations:
+                    existing_recommendations.append(recipe_id)
+
+            # Save the combined recommendations
+            recommendations_json = json.dumps(existing_recommendations)
+
+            cursor.execute(
+                """
+                INSERT INTO recommendations (user_id, recommended_recipe_ids, last_updated)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                recommended_recipe_ids = VALUES(recommended_recipe_ids),
+                last_updated = VALUES(last_updated)
+            """,
+                (user_id, recommendations_json, datetime.now()),
+            )
+
+            conn.commit()
+            return True
+
+        except Exception as e:
+            logger.error(f"Error appending recommendations: {e}")
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    async def remove_recommendation(
+        self,
+        user_id: str,
+        recipe_id: str,
+    ) -> bool:
+        """Remove a specific recipe from the user's recommendations list. This should usually
+        be the first recommendation."""
+        conn = self.get_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        try:
+            # Get existing recommendations
+            cursor.execute(
+                """
+                SELECT recommended_recipe_ids
+                FROM recommendations 
+                WHERE user_id = %s
+            """,
+                (user_id,),
+            )
+
+            result = cursor.fetchone()
+            existing_recommendations = []
+
+            if result and result["recommended_recipe_ids"]:
+                try:
+                    existing_recommendations = json.loads(
+                        result["recommended_recipe_ids"]
+                    )
+                except json.JSONDecodeError:
+                    existing_recommendations = []
+
+            # Remove the recipe that was just interacted with
+            if recipe_id in existing_recommendations:
+                existing_recommendations.remove(recipe_id)
+
+            # Save the updated recommendations
+            recommendations_json = json.dumps(existing_recommendations)
+
+            cursor.execute(
+                """
+                INSERT INTO recommendations (user_id, recommended_recipe_ids, last_updated)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                recommended_recipe_ids = VALUES(recommended_recipe_ids),
+                last_updated = VALUES(last_updated)
+            """,
+                (user_id, recommendations_json, datetime.now()),
+            )
+
+            conn.commit()
+            return True
+
+        except Exception as e:
+            logger.error(f"Error removing and adding recommendations: {e}")
+            return False
+        finally:
+            cursor.close()
+            conn.close()
 
     async def get_saved_recommendations(
         self, user_id: str, count: int = 10
@@ -222,7 +317,7 @@ class DatabaseManager:
 
         cursor.execute(
             """
-            SELECT recommended_recipe_ids, last_updated
+            SELECT recommended_recipe_ids
             FROM recommendations 
             WHERE user_id = %s
         """,
