@@ -30,7 +30,7 @@ export default function FYP() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(
-        `${apiUrl}/users/${session.user.id}/recommendations?num_recommendations=10`
+        `${apiUrl}/users/${session.user.id}/recommendations?num_recommendations=10`,
       );
 
       if (response.ok) {
@@ -57,7 +57,7 @@ export default function FYP() {
 
   const submitFeedback = async (
     recipeId: string,
-    feedbackType: "like" | "dislike"
+    feedbackType: "like" | "dislike",
   ) => {
     if (!session?.user?.id) return;
 
@@ -72,7 +72,7 @@ export default function FYP() {
             recipe_id: recipeId,
             feedback_type: feedbackType,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -144,17 +144,17 @@ export default function FYP() {
 
   if (status === "loading") {
     return (
-      <div className="flex items-center justify-center min-h-screen pt-16">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+      <div className="flex min-h-screen items-center justify-center pt-16">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-orange-500"></div>
       </div>
     );
   }
 
   if (status === "unauthenticated") {
     return (
-      <div className="flex items-center justify-center min-h-screen pt-16 px-4">
+      <div className="flex min-h-screen items-center justify-center px-4 pt-16">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="mb-2 text-2xl font-bold text-gray-800">
             Please log in
           </h2>
           <p className="text-gray-600">
@@ -167,17 +167,17 @@ export default function FYP() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen pt-16">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+      <div className="flex min-h-screen items-center justify-center pt-16">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-orange-500"></div>
       </div>
     );
   }
 
   if (!currentRecipe) {
     return (
-      <div className="flex items-center justify-center min-h-screen pt-16 px-4">
+      <div className="flex min-h-screen items-center justify-center px-4 pt-16">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="mb-2 text-2xl font-bold text-gray-800">
             No more recipes!
           </h2>
           <p className="text-gray-600">
@@ -189,7 +189,7 @@ export default function FYP() {
   }
 
   return (
-    <div className="pt-16 pb-4 px-4 min-h-screen">
+    <div className="min-h-screen px-4 py-8">
       <RecipeCard
         recipe={currentRecipe}
         onSwipe={handleSwipe}
