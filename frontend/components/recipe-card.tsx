@@ -211,7 +211,7 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
                           <h4 className="text-foreground mb-2 font-medium">
                             Ingredients
                           </h4>
-                          <ul className="text-muted-foreground list-inside list-disc space-y-1 text-sm">
+                          <ul className="text-muted-foreground [&>li::marker]:text-primary list-inside list-disc space-y-1 text-sm">
                             {recipe.ingredients.map((ingredient, idx) => (
                               <li key={idx} className="truncate">
                                 {ingredient}
@@ -238,30 +238,20 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
                               </div>
                             </div>
                           )}
-                      </div>
-                      <div className="border-border mt-4 border-t pt-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            {recipe.ingredients.length} ingredients
-                          </Badge>
-                          {typeof recipe.total_time === "number" && (
-                            <Badge variant="outline" className="text-xs">
-                              <Clock className="mr-1 h-3 w-3" />
-                              {recipe.total_time} min
-                            </Badge>
-                          )}
-                          {recipe.recipe_url && (
-                            <a
-                              href={recipe.recipe_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 ps-1 text-xs text-blue-600 hover:underline"
-                            >
-                              Source
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
-                        </div>
+                        {recipe.recipe_url && (
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(recipe.recipe_url, "_blank");
+                            }}
+                            className="mt-1 w-full"
+                            disabled={isAnimating}
+                            variant="default"
+                          >
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            View Full Recipe
+                          </Button>
+                        )}
                       </div>
                     </motion.div>
                   )}
