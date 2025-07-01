@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
 import { RecipeCard } from "@/components/recipe-card";
-import { toast } from "sonner";
 import { Recipe, RecommendationResponse, UserFeedbackResponse } from "@/types";
+import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 export default function FYP() {
   const { data: session, status } = useSession();

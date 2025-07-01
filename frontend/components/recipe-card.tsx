@@ -9,7 +9,6 @@ import {
   Bookmark,
   ChevronDown,
   ChevronUp,
-  Clock,
   ExternalLink,
   Heart,
   X,
@@ -104,6 +103,7 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
                   height={300}
                   className="h-96 w-full rounded-t-lg object-cover"
                   draggable={false}
+                  priority={true}
                 />
                 <Button
                   onClick={(e) => {
@@ -147,8 +147,8 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
               </div>
 
               <div className="p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-foreground line-clamp-1 text-lg font-semibold">
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <h3 className="text-foreground line-clamp-2 text-lg font-semibold">
                     {recipe.title}
                   </h3>
                   <Button
@@ -158,7 +158,7 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
                     }}
                     variant="ghost"
                     size="icon"
-                    className="shrink-0"
+                    className="-mt-0.5 shrink-0"
                     disabled={isAnimating}
                   >
                     {expanded ? (

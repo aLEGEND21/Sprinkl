@@ -121,21 +121,6 @@
   }
 }
 
-.line-clamp-1 {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-}
-
-/* Prevent text selection during drag */
-.cursor-grab * {
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-}
-
 /* Smooth transitions for card animations */
 .transition-all {
   transition-property: all;
