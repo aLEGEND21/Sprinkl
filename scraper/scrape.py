@@ -1,9 +1,9 @@
-from bs4 import BeautifulSoup
-import recipe_scrapers
-import undetected_chromedriver as uc
 import json
 import time
 
+import recipe_scrapers
+import undetected_chromedriver as uc
+from bs4 import BeautifulSoup
 
 SITEMAP_URL = "https://zestfulkitchen.com/post-sitemap.xml"
 JSON_FILEPATH = "./raw_recipes.json"

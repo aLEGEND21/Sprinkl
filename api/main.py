@@ -1,84 +1,69 @@
 # main.py - FastAPI application for recipe recommendations
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
-from dotenv import load_dotenv
-from datetime import datetime
 import logging
+import os
+from datetime import datetime
 from decimal import Decimal
-from recommendation_engine import RecommendationEngine
+from typing import List, Optional
+
 from database import DatabaseManager
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from models import (
-    UserLoginRequest,
-    UserLoginResponse,
-    UserFeedbackRequest,
-    UserFeedbackResponse,
     Recipe,
     RecommendationResponse,
+    UserFeedbackRequest,
+    UserFeedbackResponse,
+    UserLoginRequest,
+    UserLoginResponse,
 )
-import json
+from recommendation_engine import RecommendationEngine
 
 # Load environment variables
 load_dotenv()
 
 
-# ANSI color codes for terminal output
-class Colors:
-    BLUE = "\033[94m"
-    YELLOW = "\033[93m"
-    ORANGE = "\033[33m"
-    RED = "\033[91m"
-    BOLD = "\033[1m"
-    END = "\033[0m"
-
-
-class ColoredFormatter(logging.Formatter):
-    """Custom formatter that adds colors to log levels"""
+# --- Logging Configuration ---
+class ColorFormatter(logging.Formatter):
+    COLORS = {
+        logging.DEBUG: "\033[37m",  # White
+        logging.INFO: "\033[94m",  # Blue
+        logging.WARNING: "\033[93m",  # Yellow
+        logging.ERROR: "\033[91m",  # Red
+        logging.CRITICAL: "\033[1;91m",  # Bold Red
+    }
+    RESET = "\033[0m"
 
     def format(self, record):
-        # Save the original format
-        original_format = self._style._fmt
-
-        # Add colors based on log level
-        if record.levelno >= logging.ERROR:
-            color = Colors.RED + Colors.BOLD
-            self._style._fmt = (
-                f"{color}%(levelname)s{Colors.END}: %(name)s: %(message)s"
-            )
-        elif record.levelno >= logging.WARNING:
-            color = Colors.YELLOW + Colors.BOLD
-            self._style._fmt = (
-                f"{color}%(levelname)s{Colors.END}: %(name)s: %(message)s"
-            )
-        elif record.levelno >= logging.INFO:
-            color = Colors.BLUE + Colors.BOLD
-            self._style._fmt = (
-                f"{color}%(levelname)s{Colors.END}: %(name)s: %(message)s"
-            )
-        else:
-            self._style._fmt = "%(levelname)s: %(name)s: %(message)s"
-
-        # Format the record
-        result = super().format(record)
-
-        # Restore the original format
-        self._style._fmt = original_format
-
-        return result
+        color = self.COLORS.get(record.levelno, "")
+        message = super().format(record)
+        return f"{color}{message}{self.RESET}"
 
 
-# Configure logging with colors
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_FORMAT = "%(levelname)s %(asctime)s [%(name)s]: %(message)s"
+
+# Remove all handlers associated with the root logger object to avoid duplicate logs
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+if os.getenv("ENV", "development") == "development":
+    handler = logging.StreamHandler()
+    handler.setFormatter(ColorFormatter(LOG_FORMAT))
+else:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(name)s: %(message)s",
+    level=LOG_LEVEL,
+    handlers=[handler],
+    force=True,
 )
 
-# Get the root logger and add our colored formatter
-root_logger = logging.getLogger()
-for handler in root_logger.handlers:
-    handler.setFormatter(ColoredFormatter())
-
 logger = logging.getLogger(__name__)
+
+# --- End Logging Configuration ---
+
 
 # Initialize FastAPI app
 app = FastAPI(

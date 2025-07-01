@@ -1,7 +1,6 @@
 import json
 import re
 
-
 RAW_JSON_FILEPATH = "./raw_recipes.json"
 CLEANED_JSON_FILEPATH = "./cleaned_recipes.json"
 
@@ -187,7 +186,7 @@ for url, recipe in recipes.items():
         validation_stats["valid"] += 1
 
 # Print validation results
-print(f"\nValidation Results:")
+print("\nValidation Results:")
 print(f"Total recipes: {validation_stats['total']}")
 print(f"Valid recipes: {validation_stats['valid']}")
 print(f"Invalid recipes: {validation_stats['invalid']}")
@@ -196,7 +195,7 @@ print(
 )
 
 if validation_stats["errors"]:
-    print(f"\nError breakdown:")
+    print("\nError breakdown:")
     for error, count in sorted(
         validation_stats["errors"].items(), key=lambda x: x[1], reverse=True
     ):

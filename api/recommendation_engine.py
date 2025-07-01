@@ -11,15 +11,15 @@ This module implements a memory-efficient recommendation engine that:
 
 import json
 import logging
+import os
+import random
+import warnings
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import pymysql
-import os
-import warnings
-from typing import List, Dict, Optional, Tuple
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import normalize
 from dotenv import load_dotenv
-import random
+from sklearn.metrics.pairwise import cosine_similarity
 
 # Suppress scikit-learn numerical warnings
 warnings.filterwarnings(
@@ -508,4 +508,5 @@ class RecommendationEngine:
 
         except Exception as e:
             logger.error(f"Error getting recommendations: {e}")
+            return []
             return []
