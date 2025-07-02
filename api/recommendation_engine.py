@@ -45,7 +45,6 @@ class RecommendationEngine:
         }
 
         # Cache for frequently accessed data (minimal memory usage)
-        self._recipe_count = None
         self._recipe_ids_cache = set()
 
         logger.info("Memory-efficient recommendation engine initialized!")
@@ -53,21 +52,6 @@ class RecommendationEngine:
     def _get_connection(self):
         """Get a database connection"""
         return pymysql.connect(**self.db_config)
-
-    def _get_recipe_count(self) -> int:
-        """Get total number of recipes with feature vectors"""
-        if self._recipe_count is None:
-            conn = self._get_connection()
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    "SELECT COUNT(*) FROM recipes WHERE feature_vector IS NOT NULL"
-                )
-                self._recipe_count = cursor.fetchone()[0]
-            finally:
-                cursor.close()
-                conn.close()
-        return self._recipe_count
 
     def _get_recipe_ids(self) -> set:
         """Get set of all recipe IDs with feature vectors"""
