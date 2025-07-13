@@ -1,419 +1,177 @@
-# database.py - Database management for the recipe recommendation API
 import json
 import logging
 import os
-from datetime import datetime
 from typing import Dict, List, Optional
 
 import pymysql
 from dotenv import load_dotenv
+from models import Recipe
 
 # Load environment variables
 load_dotenv()
+MARIADB_HOST = os.getenv("MARIADB_HOST")
+MARIADB_PORT = os.getenv("MARIADB_PORT")
+MARIADB_USER = os.getenv("MARIADB_USER")
+MARIADB_PASSWORD = os.getenv("MARIADB_PASSWORD")
+MARIADB_DATABASE = os.getenv("MARIADB_DATABASE")
 
+
+# Configure logging
 logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
     def __init__(self):
         self.db_config = {
-            "host": os.getenv("MARIADB_HOST", "localhost"),
-            "port": int(os.getenv("MARIADB_PORT", "3306")),
-            "user": os.getenv("MARIADB_USER", "root"),
-            "password": os.getenv("MARIADB_PASSWORD"),
-            "database": os.getenv("MARIADB_DATABASE", "foodapp_db"),
-            "charset": "utf8mb4",
+            "host": MARIADB_HOST,
+            "port": MARIADB_PORT,
+            "user": MARIADB_USER,
+            "password": MARIADB_PASSWORD,
+            "database": MARIADB_DATABASE,
+            "cursorclass": pymysql.cursors.DictCursor,
         }
 
     def get_connection(self):
         """Get a database connection"""
         return pymysql.connect(**self.db_config)
 
-    async def get_user_by_id(self, user_id: str) -> Optional[Dict]:
-        """Get user by ID"""
-        conn = self.get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-        cursor.execute(
-            """
-            SELECT id, email, name, image_url, created_at, updated_at
-            FROM users 
-            WHERE id = %s
-        """,
-            (user_id,),
-        )
-
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        return user
-
-    async def create_user_if_not_exists(
+    def create_user_if_not_exists(
         self, user_id: str, email: str, name: str, image_url: Optional[str] = None
     ) -> bool:
-        """Create a new user if they don't exist"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        """Create a user if they don't exist"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+                existing_user = cursor.fetchone()
+                if existing_user:
+                    return False
 
-        # Check if the user already exists
-        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
-        existing_user = cursor.fetchone()
+                cursor.execute(
+                    "INSERT INTO users (id, email, name, image_url) VALUES (%s, %s, %s, %s)",
+                    (user_id, email, name, image_url),
+                )
+                conn.commit()
+                logger.info(
+                    f"Added User<user_id={user_id}, email={email}, name={name}> to the database"
+                )
+                return True
 
-        if existing_user:
-            logger.info(f"User {user_id} already exists")
-            return False
-
-        # If the user doesn't exist, create them
-        cursor.execute(
-            """
-            INSERT INTO users (id, email, name, image_url, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """,
-            (user_id, email, name, image_url, datetime.now(), datetime.now()),
-        )
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True
-
-    async def submit_feedback(
-        self, user_id: str, recipe_id: str, feedback_type: str
-    ) -> bool:
-        """Submit user feedback for a recipe"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-
-        # Insert or update feedback
-        cursor.execute(
-            """
-            INSERT INTO user_feedback (user_id, recipe_id, feedback_type, timestamp)
-            VALUES (%s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE 
-            feedback_type = VALUES(feedback_type),
-            timestamp = VALUES(timestamp)
-        """,
-            (user_id, recipe_id, feedback_type, datetime.now()),
-        )
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True
-
-    async def get_user_feedback(self, user_id: str) -> Dict[str, List[str]]:
-        """Get all feedback for a user"""
-        conn = self.get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-        cursor.execute(
-            """
-            SELECT recipe_id, feedback_type 
-            FROM user_feedback 
-            WHERE user_id = %s
-        """,
-            (user_id,),
-        )
-
-        feedback = cursor.fetchall()
-
-        liked_recipes = [
-            f["recipe_id"] for f in feedback if f["feedback_type"] == "like"
-        ]
-        disliked_recipes = [
-            f["recipe_id"] for f in feedback if f["feedback_type"] == "dislike"
-        ]
-
-        cursor.close()
-        conn.close()
-
-        return {"liked": liked_recipes, "disliked": disliked_recipes}
-
-    async def get_recipe_by_id(self, recipe_id: str) -> Optional[Dict]:
-        """Get a recipe by ID"""
-        res = await self.get_recipes_by_ids([recipe_id])
-        return res[0] if res else None
-
-    async def get_recipes_by_ids(self, recipe_ids: List[str]) -> List[Dict]:
-        """Get recipes by IDs"""
-        if not recipe_ids:
-            return []
-
-        conn = self.get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-        # Create placeholders for the IN clause
-        placeholders = ",".join(["%s"] * len(recipe_ids))
-        cursor.execute(
-            f"""
-            SELECT id, title, description, recipe_url, image_url, ingredients, instructions,
-                   category, cuisine, site_name, keywords, dietary_restrictions,
-                   total_time, overall_rating
-            FROM recipes 
-            WHERE id IN ({placeholders})
-            """,
-            tuple(recipe_ids),  # Convert list to tuple for proper parameter expansion
-        )
-
-        recipes = cursor.fetchall()
-        cursor.close()
-        conn.close()
-
-        # Parse JSON fields
-        for recipe in recipes:
-            if recipe["ingredients"]:
-                try:
-                    recipe["ingredients"] = json.loads(recipe["ingredients"])
-                except json.JSONDecodeError:
-                    recipe["ingredients"] = []
-
-            if recipe["instructions"]:
-                try:
-                    recipe["instructions"] = json.loads(recipe["instructions"])
-                except json.JSONDecodeError:
-                    recipe["instructions"] = []
-
-            if recipe["keywords"]:
-                try:
-                    recipe["keywords"] = json.loads(recipe["keywords"])
-                except json.JSONDecodeError:
-                    recipe["keywords"] = []
-
-            if recipe["dietary_restrictions"]:
-                try:
-                    recipe["dietary_restrictions"] = json.loads(
-                        recipe["dietary_restrictions"]
+    def save_recommendations(self, user_id: str, new_recipe_ids: List[str]) -> bool:
+        """Save multiple recommendations to the database in order"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                for recipe_id in new_recipe_ids:
+                    cursor.execute(
+                        "INSERT INTO recommendations (user_id, recipe_id) VALUES (%s, %s)",
+                        (user_id, recipe_id),
                     )
-                except json.JSONDecodeError:
-                    recipe["dietary_restrictions"] = []
+                conn.commit()
+                return True
 
-        return recipes
+    def get_recommendations(self, user_id: str, count: int = 10) -> List[str]:
+        """Get recommendations for a user"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT recipe_id FROM recommendations WHERE user_id = %s ORDER BY id ASC LIMIT %s",
+                    (user_id, count),
+                )
+                recommendations = cursor.fetchall()
+                return [rec["recipe_id"] for rec in recommendations]
 
-    async def save_recommendations(
-        self, user_id: str, new_recipe_ids: List[str]
-    ) -> bool:
-        """Append new recommendations to existing ones"""
-        conn = self.get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
+    def remove_recommendation(self, user_id: str, recipe_id: str) -> bool:
+        """Remove a recommendation from the database. This should be done when the user provides feedback about
+        a recipe."""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM recommendations WHERE user_id = %s AND recipe_id = %s",
+                    (user_id, recipe_id),
+                )
+                conn.commit()
+                return True
 
-        try:
-            # Get existing recommendations
-            cursor.execute(
-                """
-                SELECT recommended_recipe_ids
-                FROM recommendations 
-                WHERE user_id = %s
-            """,
-                (user_id,),
-            )
+    def save_feedback(self, user_id: str, recipe_id: str, feedback_type: str) -> bool:
+        """Save user feedback for a recipe"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO user_feedback (user_id, recipe_id, feedback_type) VALUES (%s, %s, %s)",
+                    (user_id, recipe_id, feedback_type),
+                )
+                conn.commit()
+                return True
 
-            result = cursor.fetchone()
-            existing_recommendations = []
+    def get_feedback(self, user_id: str) -> Dict[str, List[str]]:
+        """Get all feedback for a user, separated by type"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT recipe_id, feedback_type FROM user_feedback WHERE user_id = %s",
+                    (user_id,),
+                )
+                feedback = cursor.fetchall()
 
-            if result and result["recommended_recipe_ids"]:
-                try:
-                    existing_recommendations = json.loads(
-                        result["recommended_recipe_ids"]
-                    )
-                except json.JSONDecodeError:
-                    existing_recommendations = []
+                liked_recipes = [
+                    f["recipe_id"] for f in feedback if f["feedback_type"] == "like"
+                ]
+                disliked_recipes = [
+                    f["recipe_id"] for f in feedback if f["feedback_type"] == "dislike"
+                ]
 
-            # Append new recommendations (avoid duplicates)
-            for recipe_id in new_recipe_ids:
-                if recipe_id not in existing_recommendations:
-                    existing_recommendations.append(recipe_id)
+                return {"liked": liked_recipes, "disliked": disliked_recipes}
 
-            # Save the combined recommendations
-            recommendations_json = json.dumps(existing_recommendations)
+    def get_recipe_data(self, recipe_id: str) -> Recipe:
+        """Get recipe data from the database"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """SELECT id, title, description, recipe_url, image_url, ingredients, instructions, 
+                    category, cuisine, site_name, keywords, dietary_restrictions, total_time, overall_rating 
+                    FROM recipes WHERE id = %s""",
+                    (recipe_id,),
+                )
+                recipe = cursor.fetchone()
 
-            cursor.execute(
-                """
-                INSERT INTO recommendations (user_id, recommended_recipe_ids, last_updated)
-                VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE 
-                recommended_recipe_ids = VALUES(recommended_recipe_ids),
-                last_updated = VALUES(last_updated)
-            """,
-                (user_id, recommendations_json, datetime.now()),
-            )
+                # Convert recipe fields from JSON str to arrays
+                recipe["ingredients"] = json.loads(recipe["ingredients"])
+                recipe["instructions"] = json.loads(recipe["instructions"])
+                recipe["keywords"] = json.loads(recipe["keywords"])
+                recipe["dietary_restrictions"] = json.loads(
+                    recipe["dietary_restrictions"]
+                )
 
-            conn.commit()
-            return True
+                return Recipe(**recipe)
 
-        except Exception as e:
-            logger.error(f"Error appending recommendations: {e}")
-            return False
-        finally:
-            cursor.close()
-            conn.close()
+    def get_all_recipe_ids(self) -> List[str]:
+        """Get all recipe ids from the database"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT id FROM recipes")
+                res = cursor.fetchall()
 
-    async def remove_recommendation(
-        self,
-        user_id: str,
-        recipe_id: str,
-    ) -> bool:
-        """Remove a specific recipe from the user's recommendations list. This should usually
-        be the first recommendation."""
-        conn = self.get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
+                # Convert recipe_ids from [{id: recipe_id}] to [recipe_id]
+                recipe_ids = []
+                for dict_ in res:
+                    recipe_ids.append(dict_["id"])
 
-        try:
-            # Get existing recommendations
-            cursor.execute(
-                """
-                SELECT recommended_recipe_ids
-                FROM recommendations 
-                WHERE user_id = %s
-            """,
-                (user_id,),
-            )
+                return recipe_ids
 
-            result = cursor.fetchone()
-            existing_recommendations = []
+    def get_all_feature_vectors(self) -> Dict[str, float]:
+        """Get all feature vectors from the database"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT id, feature_vector FROM recipes")
+                res = cursor.fetchall()
 
-            if result and result["recommended_recipe_ids"]:
-                try:
-                    existing_recommendations = json.loads(
-                        result["recommended_recipe_ids"]
-                    )
-                except json.JSONDecodeError:
-                    existing_recommendations = []
+                # Convert feature vectors from [{"id": id, "feature_vector": feature_vector}] to {id: feature_vector}
+                id_vec_map = {}
+                for dict_ in res:
+                    id_ = dict_["id"]
+                    vec = dict_["feature_vector"]
+                    id_vec_map[id_] = vec
 
-            # Remove the recipe that was just interacted with
-            if recipe_id in existing_recommendations:
-                existing_recommendations.remove(recipe_id)
-
-            # Save the updated recommendations
-            recommendations_json = json.dumps(existing_recommendations)
-
-            cursor.execute(
-                """
-                INSERT INTO recommendations (user_id, recommended_recipe_ids, last_updated)
-                VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE 
-                recommended_recipe_ids = VALUES(recommended_recipe_ids),
-                last_updated = VALUES(last_updated)
-            """,
-                (user_id, recommendations_json, datetime.now()),
-            )
-
-            conn.commit()
-            return True
-
-        except Exception as e:
-            logger.error(f"Error removing and adding recommendations: {e}")
-            return False
-        finally:
-            cursor.close()
-            conn.close()
-
-    async def get_saved_recommendations(
-        self, user_id: str, count: int = 10
-    ) -> List[str]:
-        """Get saved recommendations for a user"""
-        conn = self.get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-        cursor.execute(
-            """
-            SELECT recommended_recipe_ids
-            FROM recommendations 
-            WHERE user_id = %s
-        """,
-            (user_id,),
-        )
-
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if result and result["recommended_recipe_ids"]:
-            try:
-                recommendations = json.loads(result["recommended_recipe_ids"])
-                return recommendations[:count]
-            except json.JSONDecodeError:
-                return []
-
-        return []
-
-    async def search_recipes(
-        self,
-        query: Optional[str] = None,
-        cuisine: Optional[str] = None,
-        max_time: Optional[int] = None,
-        limit: int = 20,
-    ) -> List[Dict]:
-        """Search recipes with filters"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-            # Build query
-            sql = """
-                SELECT id, title, description, recipe_url, image_url, ingredients, instructions,
-                       category, cuisine, site_name, keywords, dietary_restrictions,
-                       total_time, overall_rating
-                FROM recipes 
-                WHERE 1=1
-            """
-            params = []
-
-            if query:
-                sql += " AND (title LIKE %s OR description LIKE %s OR instructions LIKE %s)"
-                params.extend([f"%{query}%", f"%{query}%", f"%{query}%"])
-
-            if cuisine:
-                sql += " AND cuisine = %s"
-                params.append(cuisine)
-
-            if max_time:
-                sql += " AND total_time <= %s"
-                params.append(max_time)
-
-            sql += " ORDER BY title LIMIT %s"
-            params.append(limit)
-
-            cursor.execute(sql, params)
-            recipes = cursor.fetchall()
-
-            # Parse JSON fields
-            for recipe in recipes:
-                if recipe["ingredients"]:
-                    try:
-                        recipe["ingredients"] = json.loads(recipe["ingredients"])
-                    except json.JSONDecodeError:
-                        recipe["ingredients"] = []
-
-                if recipe["instructions"]:
-                    try:
-                        recipe["instructions"] = json.loads(recipe["instructions"])
-                    except json.JSONDecodeError:
-                        recipe["instructions"] = []
-
-                if recipe["keywords"]:
-                    try:
-                        recipe["keywords"] = json.loads(recipe["keywords"])
-                    except json.JSONDecodeError:
-                        recipe["keywords"] = []
-
-                if recipe["dietary_restrictions"]:
-                    try:
-                        recipe["dietary_restrictions"] = json.loads(
-                            recipe["dietary_restrictions"]
-                        )
-                    except json.JSONDecodeError:
-                        recipe["dietary_restrictions"] = []
-
-            cursor.close()
-            conn.close()
-            return recipes
-
-        except Exception as e:
-            logger.error(f"Error searching recipes: {str(e)}")
-            return []
+                return id_vec_map
 
 
-def get_database_connection():
-    """Factory function to get database connection"""
-    return DatabaseManager().get_connection()
+# TODO: Test all functions with mock data

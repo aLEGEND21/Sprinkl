@@ -57,15 +57,20 @@ CREATE TABLE IF NOT EXISTS user_feedback (
 
 -- 4. Recommendations Table
 -- Stores pre-calculated recommendations for each user. The ML API will update this table.
--- 'recommended_recipe_ids' stores an ordered JSON array of recipe IDs.
+-- A composite primary key ensures a user can only have one recommendation entry per recipe.
+-- An auto-incrementing index ensures proper ordering of recommendations for each user.
 CREATE TABLE IF NOT EXISTS recommendations (
-    user_id VARCHAR(255) PRIMARY KEY,
-    recommended_recipe_ids JSON, -- Stores an array of recipe IDs that are recommended for this user
-    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, -- Automatically updates on change
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    recipe_id VARCHAR(255) NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_user_recipe (user_id, recipe_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
 );
 
 -- Create an index for faster lookup on recipes
+CREATE INDEX IF NOT EXISTS idx_recipes_title ON recipes (title);
 CREATE INDEX IF NOT EXISTS idx_recipes_cuisine ON recipes (cuisine);
 CREATE INDEX IF NOT EXISTS idx_recipes_category ON recipes (category);
 CREATE INDEX IF NOT EXISTS idx_recipes_total_time ON recipes (total_time);
@@ -73,6 +78,9 @@ CREATE INDEX IF NOT EXISTS idx_recipes_overall_rating ON recipes (overall_rating
 
 -- Create an index on user_feedback for faster lookup by user_id
 CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id ON user_feedback (user_id);
+
+-- Create an index on recommendations for faster lookup by user_id
+CREATE INDEX IF NOT EXISTS idx_recommendations_user_id ON recommendations (user_id);
 
 -- Create indexes for users table
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);

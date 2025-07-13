@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Optional
 
 from database import DatabaseManager
 from dotenv import load_dotenv
@@ -17,7 +17,7 @@ from models import (
     UserLoginRequest,
     UserLoginResponse,
 )
-from recommendation_engine import RecommendationEngine
+from rec_engine import RecommendationEngine
 
 # Load environment variables
 load_dotenv()
@@ -82,7 +82,7 @@ app.add_middleware(
 )
 
 # Initialize recommendation engine
-recommendation_engine = RecommendationEngine()
+recommendation_engine = RecommendationEngine(DatabaseManager())
 
 
 # Database dependency
@@ -147,8 +147,12 @@ async def get_table_counts(db: DatabaseManager = Depends(get_db)):
         tables = ["recipes", "users", "user_feedback", "recommendations"]
 
         for table in tables:
-            cursor.execute(f"SELECT COUNT(*) FROM {table}")
-            count = cursor.fetchone()[0]
+            cursor.execute(f"SELECT COUNT(*) as total FROM {table}")
+            result = cursor.fetchone()
+            if result and ("total" in result):
+                count = result["total"]
+            else:
+                count = 0
             counts[table] = count
 
         cursor.close()
@@ -161,9 +165,10 @@ async def get_table_counts(db: DatabaseManager = Depends(get_db)):
         }
 
     except Exception as e:
-        logger.error(f"Error getting table counts: {str(e)}")
+        logger.error(f"Error getting table counts: {str(e)} (type: {type(e)})")
         raise HTTPException(
-            status_code=500, detail=f"Failed to get table counts: {str(e)}"
+            status_code=500,
+            detail=f"Failed to get table counts: {str(e)} (type: {type(e)})",
         )
 
 
@@ -174,7 +179,7 @@ async def user_login(
     """Add the user to the database if they don't exist and load their initial recommendations."""
 
     # Create the user account in the database
-    await db.create_user_if_not_exists(
+    db.create_user_if_not_exists(
         user_id=login_data.user_id,
         email=login_data.email,
         name=login_data.name,
@@ -194,49 +199,37 @@ async def submit_feedback(
     user_id: str, feedback: UserFeedbackRequest, db: DatabaseManager = Depends(get_db)
 ):
     """Submit user feedback (like/dislike) for a recipe"""
-    try:
-        # Validate feedback type
-        if feedback.feedback_type not in ["like", "dislike"]:
-            raise HTTPException(
-                status_code=400, detail="Feedback type must be 'like' or 'dislike'"
-            )
 
-        # Submit feedback
-        success = await db.submit_feedback(
-            user_id, feedback.recipe_id, feedback.feedback_type
-        )
-        await db.remove_recommendation(user_id, feedback.recipe_id)
-
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to submit feedback")
-
-        # Get the next recommendation for the user
-        rec_ids = await recommendation_engine.get_recommendations(
-            user_id, db, num_recommendations=1
-        )
-        await db.save_recommendations(user_id, rec_ids)
-        next_rec = await db.get_recipe_by_id(rec_ids[0])
-
-        # Convert recipe data to be JSON serializable
-        if hasattr(next_rec, "dict"):
-            recipe_data = next_rec.dict()
-        else:
-            recipe_data = next_rec
-
-        # Convert any Decimal objects to regular numbers
-        recipe_data = convert_decimals(recipe_data)
-
-        return UserFeedbackResponse(
-            message="Feedback submitted successfully",
-            user_id=user_id,
-            recipe_id=feedback.recipe_id,
-            feedback_type=feedback.feedback_type,
-            next_recommendation=Recipe(**next_rec),
+    # Validate feedback type
+    if feedback.feedback_type not in ["like", "dislike"]:
+        raise HTTPException(
+            status_code=400, detail="Feedback type must be 'like' or 'dislike'"
         )
 
-    except Exception as e:
-        logger.error(f"Error submitting feedback: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    # Submit feedback and remove the recommendation from the list
+    success = db.save_feedback(user_id, feedback.recipe_id, feedback.feedback_type)
+    db.remove_recommendation(user_id, feedback.recipe_id)
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to submit feedback")
+
+    # Get the next recommendation for the user
+    user_feedback = db.get_feedback(user_id)
+    prev_recs = db.get_recommendations(user_id)
+    rec_ids = recommendation_engine.generate_recommendations(
+        user_feedback, prev_recs, num_recommendations=1
+    )
+    rec_id = rec_ids[0]
+    db.save_recommendations(user_id, [rec_id])
+    next_rec = db.get_recipe_data(rec_id)
+
+    return UserFeedbackResponse(
+        message="Feedback submitted successfully",
+        user_id=user_id,
+        recipe_id=feedback.recipe_id,
+        feedback_type=feedback.feedback_type,
+        next_recommendation=next_rec,
+    )
 
 
 @app.get("/users/{user_id}/recommendations", response_model=RecommendationResponse)
@@ -246,67 +239,39 @@ async def get_recommendations(
     db: DatabaseManager = Depends(get_db),
 ):
     """Get personalized recipe recommendations for a user"""
-    try:
-        # Load the saved recommendations from the database
-        recommendation_ids = await db.get_saved_recommendations(
-            user_id, num_recommendations
+    # Load the saved recommendations from the database
+    rec_ids = db.get_recommendations(user_id)
+
+    # If no saved recommendations, generate new ones
+    if not rec_ids:
+        user_feedback = db.get_feedback(user_id)
+        prev_recs = []
+        rec_ids = recommendation_engine.generate_recommendations(
+            user_feedback, prev_recs, num_recommendations=num_recommendations
         )
+        db.save_recommendations(user_id, rec_ids)
 
-        if not recommendation_ids:
-            # If no saved recommendations, generate new ones
-            recommendation_ids = await recommendation_engine.get_recommendations(
-                user_id, db, num_recommendations
-            )
-            # Save the new recommendations
-            await db.save_recommendations(user_id, recommendation_ids)
+    # Load the full recipe data
+    recs = []
+    for rec_id in rec_ids:
+        recs.append(db.get_recipe_data(rec_id))
 
-        # Load the full recipe data
-        recommendations = await db.get_recipes_by_ids(recommendation_ids)
-        recommendations = [Recipe(**rec) for rec in recommendations]
-
-        return RecommendationResponse(
-            user_id=user_id,
-            recommendations=recommendations,
-            last_updated=datetime.now().isoformat(),
-            total_recommendations=len(recommendations),
-        )
-
-    except Exception as e:
-        logger.error(f"Error getting recommendations: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    return RecommendationResponse(
+        user_id=user_id,
+        recommendations=recs,
+        last_updated=datetime.now().isoformat(),
+        total_recommendations=len(recs),
+    )
 
 
 @app.get("/recipes/{recipe_id}", response_model=Recipe)
 async def get_recipe(recipe_id: str, db: DatabaseManager = Depends(get_db)):
     """Get details for a specific recipe"""
-    try:
-        recipe = await db.get_recipe_by_id(recipe_id)
-        if not recipe:
-            raise HTTPException(status_code=404, detail="Recipe not found")
+    recipe = db.get_recipe_data(recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
 
-        return recipe
-
-    except Exception as e:
-        logger.error(f"Error getting recipe: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-
-@app.get("/recipes", response_model=List[Recipe])
-async def search_recipes(
-    query: Optional[str] = None,
-    cuisine: Optional[str] = None,
-    max_time: Optional[int] = None,
-    limit: Optional[int] = 20,
-    db: DatabaseManager = Depends(get_db),
-):
-    """Search recipes with optional filters"""
-    try:
-        recipes = await db.search_recipes(query, cuisine, max_time, limit)
-        return recipes
-
-    except Exception as e:
-        logger.error(f"Error searching recipes: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    return recipe
 
 
 def convert_decimals(obj):
