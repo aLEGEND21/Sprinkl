@@ -1,14 +1,13 @@
 # main.py - FastAPI application for recipe recommendations
 import logging
-import os
 from datetime import datetime
-from decimal import Decimal
 from typing import Optional
 
 from database import DatabaseManager
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from logging_config import setup_logging
 from models import (
     Recipe,
     RecommendationResponse,
@@ -22,47 +21,9 @@ from rec_engine import RecommendationEngine
 # Load environment variables
 load_dotenv()
 
-
-# --- Logging Configuration ---
-class ColorFormatter(logging.Formatter):
-    COLORS = {
-        logging.DEBUG: "\033[37m",  # White
-        logging.INFO: "\033[94m",  # Blue
-        logging.WARNING: "\033[93m",  # Yellow
-        logging.ERROR: "\033[91m",  # Red
-        logging.CRITICAL: "\033[1;91m",  # Bold Red
-    }
-    RESET = "\033[0m"
-
-    def format(self, record):
-        color = self.COLORS.get(record.levelno, "")
-        message = super().format(record)
-        return f"{color}{message}{self.RESET}"
-
-
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-LOG_FORMAT = "%(levelname)s %(asctime)s [%(name)s]: %(message)s"
-
-# Remove all handlers associated with the root logger object to avoid duplicate logs
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
-
-if os.getenv("ENV", "development") == "development":
-    handler = logging.StreamHandler()
-    handler.setFormatter(ColorFormatter(LOG_FORMAT))
-else:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(LOG_FORMAT))
-
-logging.basicConfig(
-    level=LOG_LEVEL,
-    handlers=[handler],
-    force=True,
-)
-
+# Configure logging
+setup_logging()
 logger = logging.getLogger(__name__)
-
-# --- End Logging Configuration ---
 
 
 # Initialize FastAPI app
@@ -272,18 +233,6 @@ async def get_recipe(recipe_id: str, db: DatabaseManager = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     return recipe
-
-
-def convert_decimals(obj):
-    """Convert Decimal objects to regular numbers for JSON serialization"""
-    if isinstance(obj, Decimal):
-        return float(obj)
-    elif isinstance(obj, dict):
-        return {key: convert_decimals(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_decimals(item) for item in obj]
-    else:
-        return obj
 
 
 if __name__ == "__main__":
