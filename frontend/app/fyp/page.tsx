@@ -14,10 +14,6 @@ export default function FYP() {
 
   // Current recipe should always be the first recipe in the recommendations array
   useEffect(() => {
-    console.log(
-      `Recommendations has been updated and is now ${recommendations.length} recipes long`,
-    );
-    console.log(recommendations);
     if (recommendations.length > 0) {
       setCurrentRecipe(recommendations[0]);
     } else {
@@ -34,13 +30,12 @@ export default function FYP() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(
-        `${apiUrl}/users/${session.user.id}/recommendations?num_recommendations=10`,
+        `${apiUrl}/users/${session.user.id}/recommendations`,
       );
 
       if (response.ok) {
         const data: RecommendationResponse = await response.json();
         setRecommendations(data.recommendations);
-        console.log(data);
         if (data.recommendations && data.recommendations.length > 0) {
           setCurrentRecipe(data.recommendations[0]);
         } else {
@@ -89,7 +84,6 @@ export default function FYP() {
       setRecommendations((prev) => {
         return [...prev, data.next_recommendation];
       });
-      console.log(`Added ${data.next_recommendation.title} to recommendations`);
     } catch (error) {
       toast.error("Error", {
         description: "Failed to submit feedback",
@@ -98,20 +92,22 @@ export default function FYP() {
   };
 
   const handleSwipe = async (swipe: "like" | "dislike") => {
-    console.log(`Handling swipe for ${currentRecipe?.title}`);
     if (!currentRecipe) return;
 
+    // Capture the recipe ID and title before any state changes
+    const recipeId = currentRecipe.id;
+    const recipeTitle = currentRecipe.title;
+
     try {
-      // Submit feedback to backend and remove the current recipe from the recommendations array
-      submitFeedback(currentRecipe.id, swipe);
+      // Submit feedback to backend first, then remove the recipe from the array
+      await submitFeedback(recipeId, swipe);
       setRecommendations((prev) => {
-        return prev.filter((recipe) => recipe.id !== currentRecipe.id);
+        return prev.filter((recipe) => recipe.id !== recipeId);
       });
-      console.log(`Removed ${currentRecipe.title} from recommendations`);
 
       if (swipe === "like") {
         toast("Recipe liked!", {
-          description: `${currentRecipe.title} added to your likes`,
+          description: `${recipeTitle} added to your likes`,
         });
       }
     } catch (error) {
