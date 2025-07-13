@@ -173,5 +173,10 @@ class DatabaseManager:
 
                 return id_vec_map
 
-
-# TODO: Test all functions with mock data
+    def get_all_recipe_titles(self) -> Dict[str, str]:
+        """Get all recipe titles from the database. This is used for logging/debug purposes"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT id, title FROM recipes")
+                res = cursor.fetchall()
+                return {dict_["id"]: dict_["title"] for dict_ in res}

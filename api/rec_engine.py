@@ -6,7 +6,6 @@ from typing import Dict, List
 
 import numpy as np
 from database import DatabaseManager
-from dotenv import load_dotenv
 from sklearn.metrics.pairwise import cosine_similarity
 
 # Suppress scikit-learn numerical warnings
@@ -15,8 +14,6 @@ warnings.filterwarnings(
 )
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
-# Load environment variables
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +21,9 @@ logger = logging.getLogger(__name__)
 class RecommendationEngine:
     def __init__(self, db: DatabaseManager):
         self.id_vec_map = db.get_all_feature_vectors()
+        self.id_title_map = (
+            db.get_all_recipe_titles()
+        )  # Used for logging/debug purposes
         self.recipe_ids = []
         self.feature_matrix = None
 
@@ -40,12 +40,12 @@ class RecommendationEngine:
                     self.recipe_ids.append(recipe_id)
                 else:
                     logger.warning(
-                        f"Feature vector for recipe {recipe_id} is not a list"
+                        f"Feature vector for recipe {recipe_id} ({self.id_title_map[recipe_id]}) is not a list"
                     )
 
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(
-                    f"Error parsing feature vector for recipe {recipe_id}: {e}"
+                    f"Error parsing feature vector for recipe {recipe_id} ({self.id_title_map[recipe_id]}): {e}"
                 )
                 continue
 
@@ -112,14 +112,16 @@ class RecommendationEngine:
             if recipe_id in self.recipe_ids:
                 liked_indices.append(self.recipe_ids.index(recipe_id))
             else:
-                logger.warning(f"Liked recipe {recipe_id} not found in TF-IDF matrix")
+                logger.warning(
+                    f"Liked recipe {recipe_id} ({self.id_title_map[recipe_id]}) not found in TF-IDF matrix"
+                )
 
         for recipe_id in disliked_recipe_ids:
             if recipe_id in self.recipe_ids:
                 disliked_indices.append(self.recipe_ids.index(recipe_id))
             else:
                 logger.warning(
-                    f"Disliked recipe {recipe_id} not found in TF-IDF matrix"
+                    f"Disliked recipe {recipe_id} ({self.id_title_map[recipe_id]}) not found in TF-IDF matrix"
                 )
 
         # Extract feature vectors for user's feedback
@@ -128,11 +130,9 @@ class RecommendationEngine:
 
         if liked_indices:
             liked_vectors = self.feature_matrix[liked_indices]
-            logger.info(f"Extracted {len(liked_vectors)} liked recipe vectors")
 
         if disliked_indices:
             disliked_vectors = self.feature_matrix[disliked_indices]
-            logger.info(f"Extracted {len(disliked_vectors)} disliked recipe vectors")
 
         # Create user preference vector
         preference_vector = None
@@ -140,7 +140,6 @@ class RecommendationEngine:
         if liked_vectors is not None and len(liked_vectors) > 0:
             liked_avg = np.mean(liked_vectors, axis=0)
             preference_vector = like_weight * liked_avg
-            logger.info("Added liked recipes to preference vector")
 
         if disliked_vectors is not None and len(disliked_vectors) > 0:
             disliked_avg = np.mean(disliked_vectors, axis=0)
@@ -148,14 +147,12 @@ class RecommendationEngine:
                 preference_vector += dislike_weight * disliked_avg
             else:
                 preference_vector = dislike_weight * disliked_avg
-            logger.info("Added disliked recipes to preference vector")
 
         if preference_vector is None:
             logger.error("Could not create preference vector")
             return []
 
         # Compute similarities with all recipes
-        logger.info("Computing similarities with all recipes...")
         similarities = cosine_similarity([preference_vector], self.feature_matrix)[0]
 
         # Create list of (recipe_id, similarity_score) tuples
@@ -178,8 +175,10 @@ class RecommendationEngine:
 
         logger.info(f"Generated {len(top_recommendations)} recommendations")
         if top_recommendations:
+            rec_id, rec_sim = top_recommendations[0]
+            rec_title = self.id_title_map[rec_id]
             logger.info(
-                f"Top recommendation: {top_recommendations[0][0]} with similarity {top_recommendations[0][1]:.4f}"
+                f"Top recommendation: {rec_title} ({rec_id}) with similarity {rec_sim:.4f}"
             )
 
         return [r_id for r_id, _ in top_recommendations]
