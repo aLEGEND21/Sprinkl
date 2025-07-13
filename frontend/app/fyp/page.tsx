@@ -11,15 +11,19 @@ export default function FYP() {
   const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [recommendations, setRecommendations] = useState<Recipe[]>([]); // This array is treated as a queue
+  const [swipedRecipeId, setSwipedRecipeId] = useState<string | null>(null); // Track the swiped recipe id instead of removing from the queue so that the animation can complete
 
-  // Current recipe should always be the first recipe in the recommendations array
+  // Current recipe should always be the first non-swiped recipe in the recommendations array
   useEffect(() => {
     if (recommendations.length > 0) {
-      setCurrentRecipe(recommendations[0]);
+      const firstNonSwiped = recommendations.find(
+        (recipe) => recipe.id !== swipedRecipeId,
+      );
+      setCurrentRecipe(firstNonSwiped || null);
     } else {
       setCurrentRecipe(null);
     }
-  }, [recommendations]);
+  }, [recommendations, swipedRecipeId]);
 
   const fetchRecommendations = async () => {
     if (!session?.user?.id) {
@@ -98,22 +102,31 @@ export default function FYP() {
     const recipeId = currentRecipe.id;
     const recipeTitle = currentRecipe.title;
 
+    // Mark the recipe as swiped to hide it from the current recipe selection
+    setSwipedRecipeId(recipeId);
+
+    // Show toast immediately for better UX
+    if (swipe === "like") {
+      toast("Recipe liked!", {
+        description: `${recipeTitle} added to your likes`,
+      });
+    }
+
+    // Submit feedback to backend in the background
     try {
-      // Submit feedback to backend first, then remove the recipe from the array
       await submitFeedback(recipeId, swipe);
+      // Remove the recipe from the array after backend submission
       setRecommendations((prev) => {
         return prev.filter((recipe) => recipe.id !== recipeId);
       });
-
-      if (swipe === "like") {
-        toast("Recipe liked!", {
-          description: `${recipeTitle} added to your likes`,
-        });
-      }
+      // Clear the swiped recipe ID
+      setSwipedRecipeId(null);
     } catch (error) {
       toast.error("Error", {
-        description: "Failed to process swipe",
+        description: "Failed to submit feedback",
       });
+      // If backend submission fails, unmark the recipe as swiped
+      setSwipedRecipeId(null);
     }
   };
 

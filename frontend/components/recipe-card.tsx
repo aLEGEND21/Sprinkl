@@ -33,8 +33,12 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
     if (isAnimating) return;
     setIsAnimating(true);
     setSwipeDirection(action);
+
+    // Call onSwipe immediately to mark recipe as swiped
+    onSwipe(action);
+
+    // Reset animation state after animation completes
     setTimeout(() => {
-      onSwipe(action);
       setIsAnimating(false);
       setSwipeDirection(null);
       setExpanded(false);
