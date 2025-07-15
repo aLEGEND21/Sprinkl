@@ -12,6 +12,7 @@ export default function FYP() {
   const [loading, setLoading] = useState(true);
   const [recommendations, setRecommendations] = useState<Recipe[]>([]); // This array is treated as a queue
   const [swipedRecipeId, setSwipedRecipeId] = useState<string | null>(null); // Track the swiped recipe id instead of removing from the queue so that the animation can complete
+  const [savedRecipeIds, setSavedRecipeIds] = useState<Set<string>>(new Set()); // Track saved recipe IDs
 
   // Current recipe should always be the first non-swiped recipe in the recommendations array
   useEffect(() => {
@@ -56,6 +57,29 @@ export default function FYP() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSavedRecipes = async () => {
+    if (!session?.user?.id) return;
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      const response = await fetch(
+        `${apiUrl}/users/${session.user.id}/saved-recipes`,
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const savedIds = new Set<string>(
+          data.saved_recipes.map((recipe: Recipe) => recipe.id as string),
+        );
+        setSavedRecipeIds(savedIds);
+      } else {
+        console.error("Failed to load saved recipes");
+      }
+    } catch (error) {
+      console.error("Error loading saved recipes:", error);
     }
   };
 
@@ -131,16 +155,54 @@ export default function FYP() {
   };
 
   const handleBookmark = async () => {
-    if (!currentRecipe) return;
+    if (!currentRecipe || !session?.user?.id) return;
+
+    const isCurrentlySaved = savedRecipeIds.has(currentRecipe.id);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
     try {
-      // For now, just show a toast. You might want to implement bookmarking later
-      toast("Recipe bookmarked!", {
-        description: `${currentRecipe.title} saved to your collection`,
-      });
+      if (isCurrentlySaved) {
+        // Unsave the recipe
+        const response = await fetch(
+          `${apiUrl}/users/${session.user.id}/saved-recipes/${currentRecipe.id}`,
+          {
+            method: "DELETE",
+          },
+        );
+
+        if (response.ok) {
+          setSavedRecipeIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(currentRecipe.id);
+            return newSet;
+          });
+          toast("Recipe unsaved!", {
+            description: `${currentRecipe.title} removed from your collection`,
+          });
+        } else {
+          throw new Error("Failed to unsave recipe");
+        }
+      } else {
+        // Save the recipe
+        const response = await fetch(
+          `${apiUrl}/users/${session.user.id}/saved-recipes/${currentRecipe.id}`,
+          {
+            method: "POST",
+          },
+        );
+
+        if (response.ok) {
+          setSavedRecipeIds((prev) => new Set([...prev, currentRecipe.id]));
+          toast("Recipe saved!", {
+            description: `${currentRecipe.title} added to your collection`,
+          });
+        } else {
+          throw new Error("Failed to save recipe");
+        }
+      }
     } catch (error) {
       toast.error("Error", {
-        description: "Failed to bookmark recipe",
+        description: `Failed to ${isCurrentlySaved ? "unsave" : "save"} recipe`,
       });
     }
   };
@@ -148,6 +210,7 @@ export default function FYP() {
   useEffect(() => {
     if (status === "authenticated" && session?.user?.id) {
       fetchRecommendations();
+      fetchSavedRecipes();
     } else if (
       (status === "authenticated" && !session?.user?.id) ||
       status === "unauthenticated"
@@ -208,6 +271,7 @@ export default function FYP() {
         recipe={currentRecipe}
         onSwipe={handleSwipe}
         onBookmark={handleBookmark}
+        isSaved={currentRecipe ? savedRecipeIds.has(currentRecipe.id) : false}
       />
     </div>
   );

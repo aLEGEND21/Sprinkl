@@ -20,9 +20,15 @@ interface RecipeCardProps {
   recipe: Recipe;
   onSwipe: (swipe: "like" | "dislike") => void;
   onBookmark: () => void;
+  isSaved?: boolean;
 }
 
-export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
+export function RecipeCard({
+  recipe,
+  onSwipe,
+  onBookmark,
+  isSaved = false,
+}: RecipeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<
@@ -117,10 +123,14 @@ export function RecipeCard({ recipe, onSwipe, onBookmark }: RecipeCardProps) {
                   }}
                   variant="secondary"
                   size="icon"
-                  className="absolute top-3 right-3 z-10 bg-white/90 hover:bg-white dark:bg-gray-800/90 dark:hover:bg-gray-800"
+                  className={`absolute top-3 right-3 z-10 bg-white/90 hover:bg-white dark:bg-gray-800/90 dark:hover:bg-gray-800 ${
+                    isSaved ? "text-yellow-500" : ""
+                  }`}
                   disabled={isAnimating}
                 >
-                  <Bookmark className="h-4 w-4" />
+                  <Bookmark
+                    className={`h-4 w-4 ${isSaved ? "fill-current" : ""}`}
+                  />
                 </Button>
 
                 {/* Tap areas for like/dislike */}

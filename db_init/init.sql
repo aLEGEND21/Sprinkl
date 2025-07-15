@@ -55,7 +55,19 @@ CREATE TABLE IF NOT EXISTS user_feedback (
     FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
 );
 
--- 4. Recommendations Table
+-- 4. User Saved Recipes Table
+-- Stores recipes that users have saved for later reference.
+-- A composite primary key ensures a user can only save a recipe once.
+CREATE TABLE IF NOT EXISTS user_saved_recipes (
+    user_id VARCHAR(255) NOT NULL,
+    recipe_id VARCHAR(255) NOT NULL,
+    saved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, recipe_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+);
+
+-- 5. Recommendations Table
 -- Stores pre-calculated recommendations for each user. The ML API will update this table.
 -- A composite primary key ensures a user can only have one recommendation entry per recipe.
 -- An auto-incrementing index ensures proper ordering of recommendations for each user.
@@ -81,6 +93,9 @@ CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id ON user_feedback (user_id);
 
 -- Create an index on recommendations for faster lookup by user_id
 CREATE INDEX IF NOT EXISTS idx_recommendations_user_id ON recommendations (user_id);
+
+-- Create an index on user_saved_recipes for faster lookup by user_id
+CREATE INDEX IF NOT EXISTS idx_user_saved_recipes_user_id ON user_saved_recipes (user_id);
 
 -- Create indexes for users table
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);

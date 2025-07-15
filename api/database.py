@@ -121,6 +121,51 @@ class DatabaseManager:
 
                 return {"liked": liked_recipes, "disliked": disliked_recipes}
 
+    def get_saved_recipes(self, user_id: str) -> List[str]:
+        """Get all saved recipe IDs for a user"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT recipe_id FROM user_saved_recipes WHERE user_id = %s ORDER BY saved_at DESC",
+                    (user_id,),
+                )
+                saved_recipes = cursor.fetchall()
+                return [recipe["recipe_id"] for recipe in saved_recipes]
+
+    def save_recipe(self, user_id: str, recipe_id: str) -> bool:
+        """Save a recipe for a user"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute(
+                        "INSERT INTO user_saved_recipes (user_id, recipe_id) VALUES (%s, %s)",
+                        (user_id, recipe_id),
+                    )
+                    conn.commit()
+                    logger.info(f"User {user_id} saved recipe {recipe_id}")
+                    return True
+                except pymysql.err.IntegrityError:
+                    # Recipe already saved by this user
+                    logger.info(f"Recipe {recipe_id} already saved by user {user_id}")
+                    return False
+
+    def unsave_recipe(self, user_id: str, recipe_id: str) -> bool:
+        """Remove a saved recipe for a user"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM user_saved_recipes WHERE user_id = %s AND recipe_id = %s",
+                    (user_id, recipe_id),
+                )
+                conn.commit()
+                affected_rows = cursor.rowcount
+                if affected_rows > 0:
+                    logger.info(f"User {user_id} unsaved recipe {recipe_id}")
+                    return True
+                else:
+                    logger.info(f"Recipe {recipe_id} was not saved by user {user_id}")
+                    return False
+
     def get_recipe_data(self, recipe_id: str) -> Recipe:
         """Get recipe data from the database"""
         with self.get_connection() as conn:

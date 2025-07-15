@@ -235,6 +235,66 @@ async def get_recipe(recipe_id: str, db: DatabaseManager = Depends(get_db)):
     return recipe
 
 
+@app.get("/users/{user_id}/saved-recipes")
+async def get_saved_recipes(user_id: str, db: DatabaseManager = Depends(get_db)):
+    """Get all saved recipes for a user"""
+    saved_recipe_ids = db.get_saved_recipes(user_id)
+
+    # Get full recipe data for each saved recipe
+    saved_recipes = []
+    for recipe_id in saved_recipe_ids:
+        recipe = db.get_recipe_data(recipe_id)
+        saved_recipes.append(recipe)
+
+    return {
+        "user_id": user_id,
+        "saved_recipes": saved_recipes,
+        "total_saved": len(saved_recipes),
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.post("/users/{user_id}/saved-recipes/{recipe_id}")
+async def save_recipe(
+    user_id: str, recipe_id: str, db: DatabaseManager = Depends(get_db)
+):
+    """Save a recipe for a user"""
+    # Verify the recipe exists
+    recipe = db.get_recipe_data(recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    # Save the recipe
+    success = db.save_recipe(user_id, recipe_id)
+
+    return {
+        "user_id": user_id,
+        "recipe_id": recipe_id,
+        "saved": success,
+        "message": "Recipe saved successfully" if success else "Recipe already saved",
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.delete("/users/{user_id}/saved-recipes/{recipe_id}")
+async def unsave_recipe(
+    user_id: str, recipe_id: str, db: DatabaseManager = Depends(get_db)
+):
+    """Remove a saved recipe for a user"""
+    # Remove the saved recipe
+    success = db.unsave_recipe(user_id, recipe_id)
+
+    return {
+        "user_id": user_id,
+        "recipe_id": recipe_id,
+        "removed": success,
+        "message": "Recipe removed from saved recipes"
+        if success
+        else "Recipe was not saved",
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
 
