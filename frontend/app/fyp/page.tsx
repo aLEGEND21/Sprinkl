@@ -1,6 +1,6 @@
 "use client";
 
-import { RecipeCard } from "@/components/recipe-card";
+import { FYPRecipeCard } from "@/components/fyp-recipe-card";
 import { Recipe, RecommendationResponse, UserFeedbackResponse } from "@/types";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
@@ -266,8 +266,8 @@ export default function FYP() {
   }
 
   return (
-    <div className="min-h-screen px-4 pt-8 pb-28">
-      <RecipeCard
+    <div className="min-h-full px-4 pt-8">
+      <FYPRecipeCard
         recipe={currentRecipe}
         onSwipe={handleSwipe}
         onBookmark={handleBookmark}

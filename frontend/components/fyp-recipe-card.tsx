@@ -16,19 +16,19 @@ import {
 import Image from "next/image";
 import { useState } from "react";
 
-interface RecipeCardProps {
+interface FYPRecipeCardProps {
   recipe: Recipe;
   onSwipe: (swipe: "like" | "dislike") => void;
   onBookmark: () => void;
   isSaved?: boolean;
 }
 
-export function RecipeCard({
+export function FYPRecipeCard({
   recipe,
   onSwipe,
   onBookmark,
   isSaved = false,
-}: RecipeCardProps) {
+}: FYPRecipeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<

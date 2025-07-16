@@ -24,7 +24,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning={true}>
       <body className={`${geistSans.variable} antialiased`}>
         <Providers>
-          {children}
+          {/* pb-[73px] to account for height of bottom navigation */}
+          <div className="pb-[73px]">{children}</div>
           <BottomNavigation />
           <Toaster position="top-right" richColors />
         </Providers>
