@@ -300,7 +300,7 @@ export function FYPRecipeCard({
         </Button>
       </div>
 
-      <div className="text-muted-foreground mt-4 space-y-1 px-4 text-center text-sm">
+      <div className="text-muted-foreground mt-4 mb-8 space-y-1 px-4 text-center text-sm">
         <p>Tap left side to pass, right side to like</p>
         <p>Or use the buttons above • Tap ↑ for details</p>
       </div>
