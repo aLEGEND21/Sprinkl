@@ -1,4 +1,4 @@
-# elasticsearch_service.py - Elasticsearch service for recipe search functionality
+# es_service.py - Elasticsearch service for recipe search functionality
 import logging
 import os
 from typing import Dict
@@ -48,17 +48,35 @@ class ElasticsearchService:
             # Calculate from parameter for pagination
             from_value = (page - 1) * size
 
-            # Build search query with fuzzy matching
+            # Build search query with multiple strategies
             search_body = {
                 "query": {
-                    "fuzzy": {
-                        "title": {
-                            "value": query,
-                            "fuzziness": fuzziness,
-                            "max_expansions": 50,
-                            "prefix_length": 0,
-                            "transpositions": True,
-                        }
+                    "bool": {
+                        "should": [
+                            # Exact match (highest priority)
+                            {"match": {"title": {"query": query, "boost": 3}}},
+                            # Prefix match for partial words
+                            {"prefix": {"title": {"value": query, "boost": 2}}},
+                            # Fuzzy match for typos
+                            {
+                                "fuzzy": {
+                                    "title": {
+                                        "value": query,
+                                        "fuzziness": fuzziness,
+                                        "max_expansions": 100,
+                                        "prefix_length": 1,
+                                        "transpositions": True,
+                                    }
+                                }
+                            },
+                            # Contains match
+                            {
+                                "wildcard": {
+                                    "title": {"value": f"*{query}*", "boost": 1}
+                                }
+                            },
+                        ],
+                        "minimum_should_match": 1,
                     }
                 },
                 "from": from_value,

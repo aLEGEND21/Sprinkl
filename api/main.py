@@ -5,7 +5,7 @@ from typing import Optional
 
 from database import DatabaseManager
 from dotenv import load_dotenv
-from elasticsearch_service import ElasticsearchService
+from es_service import ElasticsearchService
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from logging_config import setup_logging

@@ -13,9 +13,9 @@ import { toast } from "sonner";
 
 interface SearchResponse {
   results: Recipe[];
-  total: number;
-  offset: number;
-  limit: number;
+  total_hits: number;
+  page: number;
+  size: number;
   query: string;
 }
 
@@ -63,8 +63,9 @@ export default function SearchPage() {
 
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+        const page = Math.floor(currentOffset / limit) + 1;
         const response = await fetch(
-          `${apiUrl}/recipes/search?query=${encodeURIComponent(query)}&offset=${currentOffset}&limit=${limit}`,
+          `${apiUrl}/search?q=${encodeURIComponent(query)}&page=${page}&size=${limit}`,
         );
 
         if (response.ok) {
@@ -76,8 +77,8 @@ export default function SearchPage() {
             setSearchResults(data.results);
           }
 
-          setTotalResults(data.total);
-          setHasMore(currentOffset + data.results.length < data.total);
+          setTotalResults(data.total_hits);
+          setHasMore(currentOffset + data.results.length < data.total_hits);
         } else {
           toast.error("Search failed", {
             description: "Unable to search recipes",
@@ -137,14 +138,14 @@ export default function SearchPage() {
   };
 
   return (
-    <div className="px-4 pt-4 pb-4">
+    <div className="px-4 pb-4">
       {/* Search Bar */}
-      <div className="bg-background border-border sticky top-0 z-10 -mx-4 mb-4 border-b px-4 py-4">
+      <div className="bg-background border-border sticky top-0 z-20 -mx-4 mb-4 border-b px-4 py-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
             <Input
-              placeholder="Search recipes by title..."
+              placeholder="Search for hundreds of recipes"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -156,8 +157,8 @@ export default function SearchPage() {
       {/* Search Results */}
       {searchResults.length > 0 ? (
         <div className="space-y-4">
-          <h2 className="text-foreground/80 text-center text-lg font-semibold">
-            {totalResults} recipe{totalResults !== 1 ? "s" : ""} found
+          <h2 className="text-foreground/80 text-md text-center font-semibold">
+            Found {totalResults} matching recipe{totalResults !== 1 ? "s" : ""}
           </h2>
           <div className="grid grid-cols-2 items-stretch gap-3">
             {searchResults.map((recipe) => (
@@ -244,7 +245,7 @@ export default function SearchPage() {
           )}
         </div>
       ) : searchQuery && !isSearching ? (
-        <div className="py-12 text-center">
+        <div className="my-64 py-12 text-center">
           <Search className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
           <h3 className="text-foreground mb-2 text-lg font-medium">
             No recipes found
@@ -254,7 +255,7 @@ export default function SearchPage() {
           </p>
         </div>
       ) : !searchQuery ? (
-        <div className="py-12 text-center">
+        <div className="my-64 py-12 text-center">
           <Search className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
           <h3 className="text-foreground mb-2 text-lg font-medium">
             Discover Recipes
