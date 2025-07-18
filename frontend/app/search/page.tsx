@@ -228,7 +228,7 @@ export default function SearchPage() {
 
           {/* Load More Button */}
           {hasMore && (
-            <div className="flex justify-center pt-4">
+            <div className="flex justify-center">
               <Button
                 onClick={loadMore}
                 disabled={isLoadingMore}
