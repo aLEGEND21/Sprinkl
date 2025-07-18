@@ -47,14 +47,10 @@ export default function FYP() {
           setCurrentRecipe(null);
         }
       } else {
-        toast.error("Error", {
-          description: "Failed to load recommendations",
-        });
+        throw new Error("Failed to load recommendations");
       }
     } catch (error) {
-      toast.error("Error", {
-        description: "Failed to load recommendations",
-      });
+      toast.error("Failed to load recommendations");
     } finally {
       setLoading(false);
     }
@@ -113,9 +109,7 @@ export default function FYP() {
         return [...prev, data.next_recommendation];
       });
     } catch (error) {
-      toast.error("Error", {
-        description: "Failed to submit feedback",
-      });
+      toast.error("Failed to submit feedback");
     }
   };
 
@@ -128,13 +122,6 @@ export default function FYP() {
 
     // Mark the recipe as swiped to hide it from the current recipe selection
     setSwipedRecipeId(recipeId);
-
-    // Show toast immediately for better UX
-    if (swipe === "like") {
-      toast("Recipe liked!", {
-        description: `${recipeTitle} added to your likes`,
-      });
-    }
 
     // Submit feedback to backend in the background
     try {
@@ -176,9 +163,6 @@ export default function FYP() {
             newSet.delete(currentRecipe.id);
             return newSet;
           });
-          toast("Recipe unsaved!", {
-            description: `${currentRecipe.title} removed from your collection`,
-          });
         } else {
           throw new Error("Failed to unsave recipe");
         }
@@ -193,17 +177,12 @@ export default function FYP() {
 
         if (response.ok) {
           setSavedRecipeIds((prev) => new Set([...prev, currentRecipe.id]));
-          toast("Recipe saved!", {
-            description: `${currentRecipe.title} added to your collection`,
-          });
         } else {
           throw new Error("Failed to save recipe");
         }
       }
     } catch (error) {
-      toast.error("Error", {
-        description: `Failed to ${isCurrentlySaved ? "unsave" : "save"} recipe`,
-      });
+      toast.error(`Failed to ${isCurrentlySaved ? "unsave" : "save"} recipe`);
     }
   };
 

@@ -158,9 +158,6 @@ export default function SearchPage() {
             newSet.delete(recipeId);
             return newSet;
           });
-          toast("Recipe unsaved!", {
-            description: "Recipe removed from your collection",
-          });
         } else {
           throw new Error("Failed to unsave recipe");
         }
@@ -173,9 +170,6 @@ export default function SearchPage() {
 
         if (response.ok) {
           setSavedRecipeIds((prev) => new Set([...prev, recipeId]));
-          toast("Recipe saved!", {
-            description: "Recipe added to your collection",
-          });
         } else {
           throw new Error("Failed to save recipe");
         }

@@ -59,14 +59,17 @@ export default function SavedRecipes() {
         setSavedRecipes((prev) =>
           prev.filter((recipe) => recipe.id !== recipeId),
         );
-        toast("Recipe unsaved!", {
-          description: "Recipe has been removed from your saved collection",
+        const recipeTitle =
+          savedRecipes.find((recipe) => recipe.id === recipeId)?.title ||
+          "recipe";
+        toast.success("Bookmark removed", {
+          description: `Removed bookmark from ${recipeTitle}`,
         });
       } else {
-        toast.error("Error", { description: "Failed to unsave recipe" });
+        throw new Error("Failed to unsave recipe");
       }
     } catch (error) {
-      toast.error("Error", { description: "Failed to unsave recipe" });
+      toast.error("Failed to unsave recipe");
     }
   };
 
