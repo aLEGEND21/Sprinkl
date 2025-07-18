@@ -21,6 +21,17 @@ class Recipe(BaseModel):
     overall_rating: Optional[float] = None
 
 
+class SearchResponse(BaseModel):
+    query: str
+    results: List[Recipe]
+    total_hits: int
+    page: int
+    size: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool
+
+
 class UserLoginRequest(BaseModel):
     user_id: str
     email: str

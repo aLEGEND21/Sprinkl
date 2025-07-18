@@ -1,3 +1,4 @@
+elasticsearch==9.0.2
 joblib
 numpy
 pymysql

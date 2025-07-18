@@ -1,4 +1,4 @@
-# init.py - Add the recipes from the .json file to the database
+# init.py - Add the recipes from the .json file to the database and configure Elasticsearch
 # This file is not automatically run when the container is started, unlike init.sql
 # Instead, run this script manually after the container is started from the db_init directory
 
@@ -10,6 +10,7 @@ import joblib  # To save/load scikit-learn models
 import numpy as np
 import pymysql
 from dotenv import load_dotenv
+from elasticsearch import Elasticsearch
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import OneHotEncoder
 
@@ -21,6 +22,11 @@ DB_USER = os.getenv("MARIADB_USER")
 DB_PASSWORD = os.getenv("MARIADB_PASSWORD")
 DB_HOST = os.getenv("MARIADB_HOST", "localhost")
 DB_PORT = int(os.getenv("MARIADB_PORT", "3306"))
+
+# Elasticsearch configuration
+ES_HOST = os.getenv("ES_HOST", "localhost")
+ES_PORT = int(os.getenv("ES_PORT", "9200"))
+ES_INDEX = "recipes"
 
 # Path to your JSON file
 JSON_FILE_PATH = "init_dataset.json"
@@ -153,9 +159,11 @@ if __name__ == "__main__":
         print(f"Connected to MariaDB database: {DB_NAME}")
 
         inserted_count = 0
+        recipe_ids = {}  # Store recipe IDs to use in Elasticsearch
         for i, recipe in enumerate(all_recipes_raw_data):
             try:
                 recipe_id = str(uuid.uuid4())
+                recipe_ids[i] = recipe_id  # Store the ID for Elasticsearch
 
                 # --- Generate Feature Vector for Current Recipe ---
                 # Transform text features
@@ -265,3 +273,82 @@ if __name__ == "__main__":
         if conn:
             conn.close()
             print("Database connection closed.")
+
+    # --- Elasticsearch Indexing ---
+    print("\nStarting Elasticsearch indexing...")
+
+    try:
+        # Connect to Elasticsearch
+        es = Elasticsearch(f"http://{ES_HOST}:{ES_PORT}")
+
+        # Check if Elasticsearch is running
+        if not es.ping():
+            print("Error: Cannot connect to Elasticsearch. Make sure it's running.")
+            exit(1)
+
+        print(f"Connected to Elasticsearch at {ES_HOST}:{ES_PORT}")
+
+        # Create index if it doesn't exist
+        if not es.indices.exists(index=ES_INDEX):
+            # Define the mapping for recipe titles
+            mapping = {
+                "mappings": {
+                    "properties": {
+                        "id": {"type": "keyword"},
+                        "title": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "search_analyzer": "standard",
+                        },
+                    }
+                }
+            }
+
+            es.indices.create(index=ES_INDEX, body=mapping)
+            print(f"Created Elasticsearch index: {ES_INDEX}")
+        else:
+            print(f"Elasticsearch index {ES_INDEX} already exists")
+
+        # Index recipes in Elasticsearch
+        indexed_count = 0
+        for i, recipe in enumerate(all_recipes_raw_data):
+            try:
+                # Create document for Elasticsearch (only title and id)
+                doc = {
+                    "id": recipe_ids[i],  # Use the same ID as MariaDB
+                    "title": safe_string(recipe.get("title", "")).strip(),
+                }
+
+                # Index the document
+                es.index(index=ES_INDEX, body=doc)
+                indexed_count += 1
+
+                if indexed_count % 100 == 0:
+                    print(f"Indexed {indexed_count} recipes in Elasticsearch...")
+
+            except Exception as e:
+                print(f"Error indexing recipe in Elasticsearch: {e}")
+                continue
+
+        # Refresh the index to make documents searchable immediately
+        es.indices.refresh(index=ES_INDEX)
+        print(f"Successfully indexed {indexed_count} recipes in Elasticsearch!")
+
+        # Test search functionality
+        print("\nTesting Elasticsearch search functionality...")
+        query = "apple"
+        test_response = es.search(
+            index=ES_INDEX, body={"query": {"match": {"title": query}}, "size": 5}
+        )
+
+        print(
+            f"Test search for '{query}' returned {len(test_response['hits']['hits'])} results"
+        )
+        if test_response["hits"]["hits"]:
+            print("First 5 results:")
+            for hit in test_response["hits"]["hits"][:5]:
+                print(f"  - {hit['_source']['title']}")
+
+    except Exception as e:
+        print(f"Elasticsearch error: {e}")
+        print("Make sure Elasticsearch is running and accessible")

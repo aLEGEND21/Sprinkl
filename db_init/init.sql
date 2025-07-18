@@ -81,13 +81,6 @@ CREATE TABLE IF NOT EXISTS recommendations (
     FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
 );
 
--- Create an index for faster lookup on recipes
-CREATE INDEX IF NOT EXISTS idx_recipes_title ON recipes (title);
-CREATE INDEX IF NOT EXISTS idx_recipes_cuisine ON recipes (cuisine);
-CREATE INDEX IF NOT EXISTS idx_recipes_category ON recipes (category);
-CREATE INDEX IF NOT EXISTS idx_recipes_total_time ON recipes (total_time);
-CREATE INDEX IF NOT EXISTS idx_recipes_overall_rating ON recipes (overall_rating);
-
 -- Create an index on user_feedback for faster lookup by user_id
 CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id ON user_feedback (user_id);
 

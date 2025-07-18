@@ -5,6 +5,7 @@ from typing import Optional
 
 from database import DatabaseManager
 from dotenv import load_dotenv
+from elasticsearch_service import ElasticsearchService
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from logging_config import setup_logging
@@ -45,10 +46,27 @@ app.add_middleware(
 # Initialize recommendation engine
 recommendation_engine = RecommendationEngine(DatabaseManager())
 
+# Initialize Elasticsearch service
+try:
+    es_service = ElasticsearchService()
+    logger.info("Elasticsearch service initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Elasticsearch service: {e}")
+    es_service = None
+
 
 # Database dependency
 def get_db():
     return DatabaseManager()
+
+
+# Elasticsearch dependency
+def get_es_service():
+    if es_service is None:
+        raise HTTPException(
+            status_code=503, detail="Elasticsearch service is not available"
+        )
+    return es_service
 
 
 @app.get("/")
@@ -233,6 +251,66 @@ async def get_recipe(recipe_id: str, db: DatabaseManager = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     return recipe
+
+
+@app.get("/search")
+async def search_recipes(
+    q: str,
+    page: int = 1,
+    size: int = 10,
+    fuzziness: str = "AUTO",
+    db: DatabaseManager = Depends(get_db),
+    es: ElasticsearchService = Depends(get_es_service),
+):
+    """Search recipes by title using GET request (easier for testing)"""
+    print(f"Searching for recipes with query: {q}")
+    # Validate pagination parameters
+    if page < 1:
+        raise HTTPException(status_code=400, detail="Page must be greater than 0")
+    if size < 1 or size > 100:
+        raise HTTPException(status_code=400, detail="Size must be between 1 and 100")
+
+    # Validate fuzziness parameter
+    valid_fuzziness = ["AUTO", "0", "1", "2"]
+    if fuzziness not in valid_fuzziness:
+        raise HTTPException(
+            status_code=400, detail=f"Fuzziness must be one of: {valid_fuzziness}"
+        )
+
+    # Search in Elasticsearch
+    search_results = es.search_recipes(
+        query=q, page=page, size=size, fuzziness=fuzziness
+    )
+
+    if not search_results:
+        return {
+            "query": q,
+            "results": [],
+            "total_hits": 0,
+            "page": page,
+            "size": size,
+            "total_pages": 0,
+            "has_next": False,
+            "has_previous": False,
+        }
+
+    # Get full recipe data from database
+    recipes = []
+    for recipe_id in search_results["recipe_ids"]:
+        recipe = db.get_recipe_data(recipe_id)
+        if recipe:
+            recipes.append(recipe)
+
+    return {
+        "query": q,
+        "results": recipes,
+        "total_hits": search_results["total_hits"],
+        "page": search_results["page"],
+        "size": search_results["size"],
+        "total_pages": search_results["total_pages"],
+        "has_next": search_results["has_next"],
+        "has_previous": search_results["has_previous"],
+    }
 
 
 @app.get("/users/{user_id}/saved-recipes")

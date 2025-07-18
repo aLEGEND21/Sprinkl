@@ -6,3 +6,4 @@ pymysql
 numpy
 scikit-learn
 python-multipart
+elasticsearch==9.0.2
