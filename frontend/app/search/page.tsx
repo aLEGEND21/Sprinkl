@@ -29,6 +29,7 @@ export default function SearchPage() {
   const [hasMore, setHasMore] = useState(true);
   const [totalResults, setTotalResults] = useState(0);
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [savedRecipeIds, setSavedRecipeIds] = useState<Set<string>>(new Set());
 
   const limit = 20;
 
@@ -112,28 +113,77 @@ export default function SearchPage() {
     searchRecipes(debouncedQuery, newOffset, true);
   }, [hasMore, isLoadingMore, debouncedQuery, offset, searchRecipes]);
 
+  // Fetch saved recipes when user is authenticated
+  useEffect(() => {
+    async function fetchSavedRecipes() {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      const response = await fetch(
+        `${apiUrl}/users/${session?.user?.id}/saved-recipes`,
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const savedIds = new Set<string>(
+          data.saved_recipes.map((recipe: Recipe) => recipe.id as string),
+        );
+        setSavedRecipeIds(savedIds);
+      }
+    }
+
+    fetchSavedRecipes().catch(() => {
+      toast.error("Failed to fetch saved recipes");
+    });
+  }, [session?.user]);
+
   const handleSaveRecipe = async (recipeId: string) => {
     if (!session?.user?.id) {
       toast.error("Please log in to save recipes");
       return;
     }
 
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      const response = await fetch(
-        `${apiUrl}/users/${session.user.id}/saved-recipes/${recipeId}`,
-        { method: "POST" },
-      );
+    const isCurrentlySaved = savedRecipeIds.has(recipeId);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-      if (response.ok) {
-        toast.success("Recipe saved!", {
-          description: "Recipe has been added to your saved collection",
-        });
+    try {
+      if (isCurrentlySaved) {
+        // Unsave the recipe
+        const response = await fetch(
+          `${apiUrl}/users/${session.user.id}/saved-recipes/${recipeId}`,
+          { method: "DELETE" },
+        );
+
+        if (response.ok) {
+          setSavedRecipeIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(recipeId);
+            return newSet;
+          });
+          toast("Recipe unsaved!", {
+            description: "Recipe removed from your collection",
+          });
+        } else {
+          throw new Error("Failed to unsave recipe");
+        }
       } else {
-        toast.error("Error", { description: "Failed to save recipe" });
+        // Save the recipe
+        const response = await fetch(
+          `${apiUrl}/users/${session.user.id}/saved-recipes/${recipeId}`,
+          { method: "POST" },
+        );
+
+        if (response.ok) {
+          setSavedRecipeIds((prev) => new Set([...prev, recipeId]));
+          toast("Recipe saved!", {
+            description: "Recipe added to your collection",
+          });
+        } else {
+          throw new Error("Failed to save recipe");
+        }
       }
     } catch (error) {
-      toast.error("Error", { description: "Failed to save recipe" });
+      toast.error("Error", {
+        description: `Failed to ${isCurrentlySaved ? "unsave" : "save"} recipe`,
+      });
     }
   };
 
@@ -179,10 +229,18 @@ export default function SearchPage() {
                       onClick={() => handleSaveRecipe(recipe.id)}
                       size="icon"
                       variant="outline"
-                      className="absolute top-2 right-2 z-10 bg-white/90 hover:bg-white dark:bg-gray-800/90 dark:hover:bg-gray-800"
-                      title="Save Recipe"
+                      className={`absolute top-2 right-2 z-10 bg-white/90 hover:bg-white dark:bg-gray-800/90 dark:hover:bg-gray-800 ${
+                        savedRecipeIds.has(recipe.id) ? "text-yellow-500" : ""
+                      }`}
+                      title={
+                        savedRecipeIds.has(recipe.id)
+                          ? "Unsave Recipe"
+                          : "Save Recipe"
+                      }
                     >
-                      <Bookmark className="h-4 w-4" />
+                      <Bookmark
+                        className={`h-4 w-4 ${savedRecipeIds.has(recipe.id) ? "fill-current" : ""}`}
+                      />
                     </Button>
                   </div>
                   <div className="flex flex-1 flex-col p-3">
