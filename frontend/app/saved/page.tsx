@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import Image from "next/image";
+import { RecipeImage } from "@/components/ui/recipe-image";
 import { Clock, ExternalLink, Bookmark } from "lucide-react";
 import { Trash } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -113,8 +113,8 @@ export default function SavedRecipes() {
               >
                 <CardContent className="-my-6 flex h-full flex-1 flex-col p-0">
                   <div className="relative">
-                    <Image
-                      src={recipe.image_url || "/placeholder.svg"}
+                    <RecipeImage
+                      src={recipe.image_url || ""}
                       alt={recipe.title}
                       width={200}
                       height={120}

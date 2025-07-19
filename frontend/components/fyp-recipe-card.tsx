@@ -13,7 +13,7 @@ import {
   Heart,
   X,
 } from "lucide-react";
-import Image from "next/image";
+import { RecipeImage } from "@/components/ui/recipe-image";
 import { useState } from "react";
 
 interface FYPRecipeCardProps {
@@ -107,9 +107,9 @@ export function FYPRecipeCard({
           <Card className="w-full shadow-lg transition-all duration-200 select-none">
             <CardContent className="-my-6 p-0">
               <div className="relative">
-                <Image
-                  src={recipe.image_url!}
-                  alt={recipe.title!}
+                <RecipeImage
+                  src={recipe.image_url || ""}
+                  alt={recipe.title || ""}
                   width={400}
                   height={300}
                   className="h-96 w-full rounded-t-lg object-cover"

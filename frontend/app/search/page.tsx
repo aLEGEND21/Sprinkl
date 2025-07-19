@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Clock, ExternalLink, Bookmark } from "lucide-react";
-import Image from "next/image";
+import { RecipeImage } from "@/components/ui/recipe-image";
 import { Recipe } from "@/types/recipe";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
@@ -212,8 +212,8 @@ export default function SearchPage() {
               >
                 <CardContent className="-my-6 flex h-full flex-1 flex-col p-0">
                   <div className="relative">
-                    <Image
-                      src={recipe.image_url || "/placeholder.svg"}
+                    <RecipeImage
+                      src={recipe.image_url || ""}
                       alt={recipe.title}
                       width={200}
                       height={120}
