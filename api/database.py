@@ -166,27 +166,41 @@ class DatabaseManager:
                     logger.info(f"Recipe {recipe_id} was not saved by user {user_id}")
                     return False
 
-    def get_recipe_data(self, recipe_id: str) -> Recipe:
+    def get_recipe(self, recipe_id: str) -> Recipe:
         """Get recipe data from the database"""
+        recipes = self.get_multiple_recipes([recipe_id])
+        return recipes[0] if recipes else None
+
+    def get_multiple_recipes(self, recipe_ids: List[str]) -> List[Recipe]:
+        """Get multiple recipes from the database in a single query"""
+        if not recipe_ids:
+            return []
+
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
+                # Create placeholders for the IN clause
+                placeholders = ", ".join(["%s"] * len(recipe_ids))
                 cursor.execute(
-                    """SELECT id, title, description, recipe_url, image_url, ingredients, instructions, 
+                    f"""SELECT id, title, description, recipe_url, image_url, ingredients, instructions, 
                     category, cuisine, site_name, keywords, dietary_restrictions, total_time, overall_rating 
-                    FROM recipes WHERE id = %s""",
-                    (recipe_id,),
+                    FROM recipes WHERE id IN ({placeholders})""",
+                    recipe_ids,
                 )
-                recipe = cursor.fetchone()
+                recipes = cursor.fetchall()
 
-                # Convert recipe fields from JSON str to arrays
-                recipe["ingredients"] = json.loads(recipe["ingredients"])
-                recipe["instructions"] = json.loads(recipe["instructions"])
-                recipe["keywords"] = json.loads(recipe["keywords"])
-                recipe["dietary_restrictions"] = json.loads(
-                    recipe["dietary_restrictions"]
-                )
+                # Convert recipe fields from JSON str to arrays and create Recipe objects
+                recipe_objects = []
+                for recipe in recipes:
+                    if recipe:
+                        recipe["ingredients"] = json.loads(recipe["ingredients"])
+                        recipe["instructions"] = json.loads(recipe["instructions"])
+                        recipe["keywords"] = json.loads(recipe["keywords"])
+                        recipe["dietary_restrictions"] = json.loads(
+                            recipe["dietary_restrictions"]
+                        )
+                        recipe_objects.append(Recipe(**recipe))
 
-                return Recipe(**recipe)
+                return recipe_objects
 
     def get_all_recipe_ids(self) -> List[str]:
         """Get all recipe ids from the database"""

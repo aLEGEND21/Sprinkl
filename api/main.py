@@ -200,7 +200,7 @@ async def submit_feedback(
     )
     rec_id = rec_ids[0]
     db.save_recommendations(user_id, [rec_id])
-    next_rec = db.get_recipe_data(rec_id)
+    next_rec = db.get_recipe(rec_id)
 
     return UserFeedbackResponse(
         message="Feedback submitted successfully",
@@ -230,10 +230,8 @@ async def get_recommendations(
         )
         db.save_recommendations(user_id, rec_ids)
 
-    # Load the full recipe data
-    recs = []
-    for rec_id in rec_ids:
-        recs.append(db.get_recipe_data(rec_id))
+    # Load the full recipe data in bulk
+    recs = db.get_multiple_recipes(rec_ids)
 
     return RecommendationResponse(
         user_id=user_id,
@@ -246,7 +244,7 @@ async def get_recommendations(
 @app.get("/recipes/{recipe_id}", response_model=Recipe)
 async def get_recipe(recipe_id: str, db: DatabaseManager = Depends(get_db)):
     """Get details for a specific recipe"""
-    recipe = db.get_recipe_data(recipe_id)
+    recipe = db.get_recipe(recipe_id)
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
@@ -294,12 +292,8 @@ async def search_recipes(
             "has_previous": False,
         }
 
-    # Get full recipe data from database
-    recipes = []
-    for recipe_id in search_results["recipe_ids"]:
-        recipe = db.get_recipe_data(recipe_id)
-        if recipe:
-            recipes.append(recipe)
+    # Get full recipe data from database in bulk
+    recipes = db.get_multiple_recipes(search_results["recipe_ids"])
 
     return {
         "query": q,
@@ -318,11 +312,8 @@ async def get_saved_recipes(user_id: str, db: DatabaseManager = Depends(get_db))
     """Get all saved recipes for a user"""
     saved_recipe_ids = db.get_saved_recipes(user_id)
 
-    # Get full recipe data for each saved recipe
-    saved_recipes = []
-    for recipe_id in saved_recipe_ids:
-        recipe = db.get_recipe_data(recipe_id)
-        saved_recipes.append(recipe)
+    # Get full recipe data for saved recipes in bulk
+    saved_recipes = db.get_multiple_recipes(saved_recipe_ids)
 
     return {
         "user_id": user_id,
@@ -338,7 +329,7 @@ async def save_recipe(
 ):
     """Save a recipe for a user"""
     # Verify the recipe exists
-    recipe = db.get_recipe_data(recipe_id)
+    recipe = db.get_recipe(recipe_id)
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
