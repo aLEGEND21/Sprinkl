@@ -103,7 +103,7 @@ export default function LandingPage() {
               </div>
 
               {/* HERO SECTION BUTTONS */}
-              <div className="flex w-full flex-row gap-4">
+              <div className="flex w-full flex-row gap-2 sm:gap-4">
                 <Button
                   onClick={() =>
                     signIn("google", { callbackUrl: "/protected/fyp" })
@@ -128,7 +128,7 @@ export default function LandingPage() {
 
             {/* Hero Image/Mockup */}
             <div className="flex justify-center lg:justify-end">
-              <div className="relative h-80 w-64 lg:h-96 lg:w-80">
+              <div className="relative h-90 w-64 lg:h-96 lg:w-80">
                 <div className="absolute inset-0 rotate-3 transform rounded-3xl bg-gradient-to-b from-orange-400 to-orange-600 shadow-2xl" />
                 <div className="absolute inset-0 -rotate-1 transform rounded-3xl border bg-white shadow-xl dark:bg-gray-900">
                   <div className="flex h-full flex-col p-4 lg:p-6">
@@ -137,7 +137,7 @@ export default function LandingPage() {
                       alt="Recipe preview"
                       width={280}
                       height={200}
-                      className="mb-3 h-40 w-full rounded-2xl object-cover lg:h-48"
+                      className="mb-3 h-48 w-full rounded-2xl object-cover lg:h-48"
                     />
                     <h3 className="text-foreground mb-2 text-lg font-semibold">
                       Creamy Pasta Carbonara
@@ -272,7 +272,7 @@ export default function LandingPage() {
           </div>
 
           {/* CTA SECTION BUTTONS */}
-          <div className="mx-auto flex w-full flex-row justify-center gap-4">
+          <div className="mx-auto flex w-full flex-row justify-center gap-2 sm:gap-4">
             <Button
               onClick={() =>
                 signIn("google", { callbackUrl: "/protected/fyp" })

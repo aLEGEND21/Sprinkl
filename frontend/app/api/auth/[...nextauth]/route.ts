@@ -66,17 +66,6 @@ const handler = NextAuth({
 
       return true;
     },
-    async redirect({ url, baseUrl }) {
-      // If the callbackUrl is a /protected route, allow it
-      try {
-        const target = new URL(url, baseUrl);
-        if (target.pathname.startsWith("/protected")) {
-          return url;
-        }
-      } catch {}
-      // Otherwise, always redirect to /protected/fyp
-      return `${baseUrl}/protected/fyp`;
-    },
   },
 });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { BottomNavigation } from "@/components/bottom-navigation";
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 
@@ -16,7 +16,7 @@ export default function ProtectedLayout({
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.replace(`/login?callbackUrl=${encodeURIComponent(pathname)}`);
+      signIn("google", { callbackUrl: pathname });
     }
   }, [status, router, pathname]);
 
@@ -28,7 +28,7 @@ export default function ProtectedLayout({
           children
         ) : (
           // Loading spinner
-          <div className="flex h-full w-full items-center justify-center py-20">
+          <div className="flex h-full w-full items-center justify-center py-40">
             <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-orange-500"></div>
           </div>
         )}
