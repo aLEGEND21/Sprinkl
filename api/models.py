@@ -66,3 +66,11 @@ class RecommendationResponse(BaseModel):
     recommendations: List[Recipe]
     last_updated: str
     total_recommendations: int
+
+
+class UserStatsResponse(BaseModel):
+    user_id: str
+    num_liked: int
+    num_saved: int
+    num_viewed: int
+    favorite_cuisine: Optional[str] = None

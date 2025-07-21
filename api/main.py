@@ -16,6 +16,7 @@ from models import (
     UserFeedbackResponse,
     UserLoginRequest,
     UserLoginResponse,
+    UserStatsResponse,
 )
 from rec_engine import RecommendationEngine
 
@@ -362,6 +363,49 @@ async def unsave_recipe(
         else "Recipe was not saved",
         "timestamp": datetime.now().isoformat(),
     }
+
+
+@app.get("/users/{user_id}/stats", response_model=UserStatsResponse)
+async def get_user_stats(user_id: str, db: DatabaseManager = Depends(get_db)):
+    """Get user stats: number of liked, saved, viewed recipes, and favorite cuisine."""
+    feedback = db.get_feedback(user_id)
+    liked = feedback.get("liked", [])
+    disliked = feedback.get("disliked", [])
+    num_liked = len(liked)
+    num_viewed = len(liked) + len(disliked)
+    saved = db.get_saved_recipes(user_id)
+    num_saved = len(saved)
+
+    # Favorite cuisine from liked recipes
+    favorite_cuisine = None
+    if liked:
+        liked_recipes = db.get_multiple_recipes(liked)
+        cuisine_counts = {}
+        for recipe in liked_recipes:
+            cuisine = getattr(recipe, "cuisine", None)
+            if cuisine:
+                cuisine_counts[cuisine] = cuisine_counts.get(cuisine, 0) + 1
+        if cuisine_counts:
+            favorite_cuisine = max(cuisine_counts.items(), key=lambda x: x[1])[0]
+
+    return UserStatsResponse(
+        user_id=user_id,
+        num_liked=num_liked,
+        num_saved=num_saved,
+        num_viewed=num_viewed,
+        favorite_cuisine=favorite_cuisine,
+    )
+
+
+@app.delete("/users/{user_id}")
+async def delete_user(user_id: str, db: DatabaseManager = Depends(get_db)):
+    """Delete a user and all their related data."""
+    success = db.delete_user(user_id)
+    if not success:
+        raise HTTPException(
+            status_code=404, detail="User not found or could not be deleted"
+        )
+    return {"message": "User deleted successfully", "user_id": user_id}
 
 
 if __name__ == "__main__":

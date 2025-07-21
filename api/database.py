@@ -56,6 +56,15 @@ class DatabaseManager:
                 )
                 return True
 
+    def delete_user(self, user_id: str) -> bool:
+        """Delete a user from the database. Related data is deleted via ON DELETE CASCADE."""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+                conn.commit()
+                logger.info(f"Deleted user and related data for user_id={user_id}")
+                return True
+
     def save_recommendations(self, user_id: str, new_recipe_ids: List[str]) -> bool:
         """Save multiple recommendations to the database in order"""
         with self.get_connection() as conn:
