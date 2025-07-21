@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export default function FYP() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [recommendations, setRecommendations] = useState<Recipe[]>([]); // This array is treated as a queue
@@ -187,39 +187,11 @@ export default function FYP() {
   };
 
   useEffect(() => {
-    if (status === "authenticated" && session?.user?.id) {
+    if (session?.user?.id) {
       fetchRecommendations();
       fetchSavedRecipes();
-    } else if (
-      (status === "authenticated" && !session?.user?.id) ||
-      status === "unauthenticated"
-    ) {
-      setLoading(false);
     }
-  }, [session, status]);
-
-  if (status === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center pt-16">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-orange-500"></div>
-      </div>
-    );
-  }
-
-  if (status === "unauthenticated") {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-4 pt-16">
-        <div className="text-center">
-          <h2 className="mb-2 text-2xl font-bold text-gray-800">
-            Please log in
-          </h2>
-          <p className="text-gray-600">
-            You need to be logged in to view recommendations.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  }, [session?.user?.id]);
 
   if (loading) {
     return (

@@ -12,25 +12,25 @@ export function BottomNavigation() {
       id: "for-you",
       label: "For You",
       icon: Home,
-      path: "/fyp",
+      path: "/protected/fyp",
     },
     {
       id: "search",
       label: "Search",
       icon: Search,
-      path: "/search",
+      path: "/protected/search",
     },
     {
       id: "saved",
       label: "Saved",
       icon: Bookmark,
-      path: "/saved",
+      path: "/protected/saved",
     },
     {
       id: "settings",
       label: "Settings",
       icon: Settings,
-      path: "/settings",
+      path: "/protected/settings",
     },
   ];
 

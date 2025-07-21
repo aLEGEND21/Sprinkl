@@ -14,7 +14,7 @@ import { Recipe } from "@/types";
 
 export default function SavedRecipes() {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const [savedRecipes, setSavedRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,10 +42,10 @@ export default function SavedRecipes() {
         setLoading(false);
       }
     };
-    if (status === "authenticated") {
+    if (session?.user?.id) {
       fetchSavedRecipes();
     }
-  }, [session, status]);
+  }, [session]);
 
   const handleUnsaveRecipe = async (recipeId: string) => {
     if (!session?.user?.id) return;

@@ -1,4 +1,3 @@
-import { BottomNavigation } from "@/components/bottom-navigation";
 import { Toaster } from "@/components/ui/sonner";
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
@@ -24,10 +23,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning={true}>
       <body className={`${geistSans.variable} antialiased`}>
         <Providers>
-          {/* pb-[73px] to account for height of bottom navigation */}
-          <div className="pb-[73px]">{children}</div>
-          <BottomNavigation />
-          <Toaster position="top-right" richColors />
+          {children}
+          <Toaster position="top-center" richColors />
         </Providers>
       </body>
     </html>

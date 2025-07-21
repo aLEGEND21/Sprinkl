@@ -36,6 +36,7 @@ import {
   User,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -43,6 +44,7 @@ import { toast } from "sonner";
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { data: session } = useSession();
+  const router = useRouter();
 
   // User stats state
   const [userStats, setUserStats] = useState<{
@@ -77,6 +79,13 @@ export default function SettingsPage() {
     fetchStats();
   }, [session?.user?.id]);
 
+  const handleLogout = () => {
+    // Manually replace route instead of using signOut's callbackUrl since client-side nav triggers
+    // first due to the protected/layout.tsx setup redirecting to the login page rather than landing page
+    signOut({ redirect: false });
+    router.replace("/");
+  };
+
   const deleteAccount = async () => {
     if (!session?.user?.id) return;
     try {
@@ -86,7 +95,7 @@ export default function SettingsPage() {
       });
       if (!res.ok) throw new Error("Failed to delete account");
       toast.success("Account deleted successfully");
-      signOut();
+      handleLogout();
     } catch (error) {
       toast.error("Failed to delete account");
     }
@@ -244,11 +253,7 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => signOut()}
-          >
+          <Button variant="outline" className="w-full" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Log Out
           </Button>

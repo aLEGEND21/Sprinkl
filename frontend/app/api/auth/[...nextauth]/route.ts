@@ -47,8 +47,8 @@ const handler = NextAuth({
           profile && typeof profile === "object" && "id" in profile
             ? (profile.id as string)
             : profile && typeof profile === "object" && "sub" in profile
-            ? (profile.sub as string)
-            : user.email || user.id;
+              ? (profile.sub as string)
+              : user.email || user.id;
 
         const session = {
           user: {
@@ -65,6 +65,17 @@ const handler = NextAuth({
       }
 
       return true;
+    },
+    async redirect({ url, baseUrl }) {
+      // If the callbackUrl is a /protected route, allow it
+      try {
+        const target = new URL(url, baseUrl);
+        if (target.pathname.startsWith("/protected")) {
+          return url;
+        }
+      } catch {}
+      // Otherwise, always redirect to /protected/fyp
+      return `${baseUrl}/protected/fyp`;
     },
   },
 });
