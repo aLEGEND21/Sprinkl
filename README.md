@@ -1,260 +1,223 @@
-# FoodApp - AI-Powered Recipe Recommendation System
+# FoodApp - Tinder for Recipes
 
-A full-stack web application that provides personalized recipe recommendations using AI and OAuth authentication.
+A modern, full-stack web application for discovering, searching, and saving recipes, powered by AI-driven personalized recommendations and Google OAuth authentication.
 
-## 🍽️ Features
+---
 
-- **OAuth Authentication**: Secure Google OAuth login
-- **Personalized Recommendations**: AI-powered recipe suggestions based on user preferences
-- **User Feedback System**: Like/dislike recipes to improve recommendations
-- **Recipe Search**: Search recipes with filters (cuisine, cooking time, etc.)
-- **User Statistics**: Track preferences and cooking patterns
-- **Modern UI**: Dark mode interface with responsive design
-- **Real-time Updates**: Recommendations update automatically with user feedback
+## 🚀 Features
+
+- **Google OAuth Authentication**: Secure login with Google using NextAuth.js.
+- **Swipe to Discover**: Tinder-style swipe interface for recipe discovery (For You Page).
+- **Personalized AI Recommendations**: Recipes tailored to your tastes using ML and user feedback.
+- **Smart Search**: Find recipes by ingredient, cuisine, or cooking time with fuzzy search (Elasticsearch).
+- **Save Favorites**: Bookmark recipes for quick access later.
+- **User Feedback System**: Like/dislike recipes to improve future recommendations.
+- **User Statistics**: Track your preferences and cooking patterns.
+- **Mobile-First UI**: Responsive, dark-mode enabled, and optimized for mobile with smooth animations.
+- **Real-time Updates**: Recommendations and saved recipes update instantly as you interact.
+
+---
 
 ## 🏗️ Architecture
 
-### Frontend (Next.js)
-- **Next.js 15**: React framework with App Router
-- **NextAuth.js**: OAuth authentication with Google
-- **TypeScript**: Type-safe development
-- **Tailwind CSS**: Modern styling with dark mode
-- **Server Actions**: Server-side user management
+**Frontend**
 
-### Backend (FastAPI)
-- **FastAPI**: Modern Python web framework
-- **MariaDB**: Relational database
-- **scikit-learn**: Machine learning for recommendations
-- **Docker**: Containerized deployment
+- [Next.js 15](https://nextjs.org/) (App Router, React 19, TypeScript)
+- [NextAuth.js](https://next-auth.js.org/) for Google OAuth
+- [Tailwind CSS](https://tailwindcss.com/) for styling
+- Mobile-first, PWA-like experience
 
-### Database
-- **MariaDB**: Stores recipes, users, feedback, and recommendations
-- **Persistent Storage**: Docker volumes for data persistence
+**Backend**
 
-## 🚀 Quick Start
+- [FastAPI](https://fastapi.tiangolo.com/) (Python 3.8+)
+- [MariaDB](https://mariadb.org/) for persistent storage
+- [scikit-learn](https://scikit-learn.org/) for ML-based recommendations
+- [Elasticsearch](https://www.elastic.co/elasticsearch/) for full-text and fuzzy search
+- Dockerized for local and production deployment
+
+**Database**
+
+- Recipes, users, feedback, saved recipes, and recommendations stored in MariaDB
+- Initial schema and data via `db_init/init.sql` and `db_init/init_dataset.json`
+- ML models and vectorizers stored in `ml_models/`
+
+**DevOps**
+
+- All services orchestrated with Docker Compose
+- Hot-reload for both frontend and backend in development
+
+---
+
+## ⚡ Getting Started (Development Quickstart)
 
 ### Prerequisites
-- Docker and Docker Compose
-- Node.js 18+ (for local frontend development)
-- Python 3.8+ (for local backend development)
 
-### 1. Clone and Setup
+- [Docker](https://www.docker.com/) & [Docker Compose](https://docs.docker.com/compose/)
+- Node.js 18+ (for frontend dev)
+- Python 3.8+ (for backend dev)
+
+### 1. Clone the Repository
+
 ```bash
 git clone <repository-url>
 cd FoodApp
 ```
 
-### 2. Environment Configuration
-```bash
-# Copy environment template
-cp .env.example .env
+### 2. Configure Environment Variables
 
-# Edit .env with your configuration
-nano .env
+```bash
+cp .env.example .env
+# Edit .env with your Google OAuth and DB credentials
 ```
 
-Required environment variables:
-```env
-# Database Configuration
+**Required variables:**
+
+```
 MARIADB_HOST=localhost
 MARIADB_PORT=3306
 MARIADB_USER=root
 MARIADB_PASSWORD=your_password
 MARIADB_DATABASE=foodapp_db
-
-# Google OAuth (Required for authentication)
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
-
-# Backend API URL
-BACKEND_API_URL=http://localhost:3009
+BACKEND_API_URL=http://localhost:8000
 ```
 
-### 3. Start the Application
+### 3. Start All Services (Recommended)
+
 ```bash
-# Start all services with Docker Compose
 docker-compose up --build
 ```
 
-### 4. Access the Application
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:3009
-- **API Documentation**: http://localhost:3009/docs
-- **Database**: localhost:3306
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- Backend API: [http://localhost:8000](http://localhost:8000)
+- API Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+- MariaDB: localhost:3306
+- Elasticsearch: localhost:9200
 
-## 🔧 Development Setup
+### 4. Local Development (Hot Reload)
 
-### Frontend Development
+#### Frontend
+
 ```bash
 cd frontend
 npm install
 npm run dev
+# Visit http://localhost:3000
 ```
 
-### Backend Development
+#### Backend
+
 ```bash
 cd api
 pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 3009
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Visit http://localhost:8000/docs
 ```
 
-### Database Management
-```bash
-# Access MariaDB container
-docker-compose exec mariadb mysql -u root -p
+#### Database
 
-# Run migrations (if needed)
+- Schema auto-initialized by Docker Compose on first run.
+- To manually re-run schema:
+
+```bash
 docker-compose exec mariadb mysql -u root -p foodapp_db < db_init/init.sql
 ```
 
-## 📚 API Endpoints
+---
 
-### Authentication
-- `POST /api/users/login` - Handle user login and profile creation
+## 🛠️ Development Workflow
 
-### User Management
-- `GET /users/{user_id}/recommendations` - Get personalized recommendations
-- `POST /users/{user_id}/feedback` - Submit recipe feedback
-- `GET /users/{user_id}/stats` - Get user statistics
-- `POST /users/{user_id}/recommendations/refresh` - Refresh recommendations
+1. **Frontend**: Edit React/TypeScript code in `frontend/app/` and components in `frontend/components/`.
+2. **Backend**: Edit FastAPI code in `api/` (models, endpoints, ML logic).
+3. **Database**: Update schema in `db_init/init.sql` and data in `db_init/init_dataset.json`.
+4. **ML/Recommendation Logic**: Update or retrain models in `ml_models/` and scripts in `db_init/`.
+5. **Testing**: Use the FastAPI docs at `/docs` for API testing. Frontend can be tested with browser/devtools.
+6. **Hot Reload**: Both frontend and backend support hot reload in dev mode.
+7. **Contributions**: Fork, branch, PR. Test thoroughly before submitting.
 
-### Recipes
-- `GET /recipes/{recipe_id}` - Get specific recipe
-- `GET /recipes` - Search recipes with filters
+---
 
-### Health Check
-- `GET /` - API health status
+## 🚀 Deployment Guide
 
-## 🤖 How Recommendations Work
+### Production Deployment
 
-1. **Content-Based Filtering**: Analyzes recipe ingredients, cuisine, and cooking time
-2. **User Preference Learning**: Tracks likes/dislikes to understand preferences
-3. **Similarity Calculation**: Uses TF-IDF vectorization and cosine similarity
-4. **Multi-Strategy Approach**: Combines content-based and cuisine-based recommendations
-5. **Dynamic Updates**: Recommendations update automatically with user feedback
-6. **New User Onboarding**: Generates initial recommendations for new users
+1. **Set production environment variables** in `.env` (use strong DB password, production Google OAuth, etc.)
+2. **Configure Google OAuth** for your production domain in the Google Cloud Console.
+3. **Build and run with Docker Compose**:
+   ```bash
+   docker-compose -f docker-compose.yml up --build -d
+   ```
+4. **Set up SSL** (e.g., with a reverse proxy like Nginx or Caddy).
+5. **Backups**: Configure regular MariaDB backups (see MariaDB docs).
+6. **Scaling**: For scaling, deploy containers to a cloud provider or orchestrator (Kubernetes, ECS, etc.).
 
-## 🔐 Authentication Flow
+---
 
-1. User clicks "Log In with Google" on frontend
-2. NextAuth.js handles OAuth flow with Google
-3. On successful login, server action calls backend API
-4. Backend creates/updates user in database
-5. Initial recommendations are generated for new users
-6. User session is established with NextAuth.js
+## 📋 Viewing Logs
+
+- **All services:**
+  ```bash
+  docker-compose logs
+  ```
+- **Backend API logs:**
+  ```bash
+  docker-compose logs api
+  # or, for more detail, attach to the container:
+  docker-compose exec api tail -f /var/log/app.log
+  ```
+- **Frontend logs:**
+  ```bash
+  docker-compose logs frontend
+  # or, in dev mode:
+  cd frontend && npm run dev
+  ```
+- **Database logs:**
+  ```bash
+  docker-compose logs mariadb
+  ```
+- **Elasticsearch logs:**
+  ```bash
+  docker-compose logs elasticsearch
+  ```
+- **API documentation:**
+  [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+## 🧠 How Recommendations Work
+
+- **Content-based filtering**: Recipes are vectorized using TF-IDF (title, ingredients, instructions, description) and one-hot encoding (cuisine).
+- **User feedback**: Likes/dislikes are tracked and used to weight recommendations.
+- **Cosine similarity**: Finds recipes most similar to those you liked, least similar to those you disliked.
+- **Elasticsearch**: Used for fast, fuzzy search by title and ingredients.
+- **New users**: Get a diverse set of recommendations on first login.
+
+---
 
 ## 📁 Project Structure
 
 ```
 FoodApp/
-├── frontend/                 # Next.js frontend application
-│   ├── app/                 # App Router pages and components
-│   ├── public/              # Static assets
-│   └── package.json         # Frontend dependencies
-├── api/                     # FastAPI backend application
-│   ├── main.py             # Main API application
-│   ├── database.py         # Database management
-│   ├── recommendation_engine.py  # ML recommendation logic
-│   └── requirements.txt    # Python dependencies
-├── db_init/                # Database initialization
-│   ├── init.sql           # Database schema
-│   └── init_dataset.csv   # Initial recipe data
-├── ml_models/              # Pre-trained ML models
-├── docker-compose.yml      # Docker services configuration
-└── README.md              # This file
+├── frontend/      # Next.js frontend (React, TypeScript, Tailwind)
+├── api/           # FastAPI backend (Python, ML, DB)
+├── db_init/       # DB schema, initial data, ML scripts
+├── ml_models/     # Saved ML models/vectorizers
+├── docker-compose.yml
+└── README.md
 ```
-
-## 🛠️ Development Workflow
-
-### Adding New Features
-1. **Frontend Changes**: Edit files in `frontend/app/`
-2. **Backend Changes**: Edit files in `api/`
-3. **Database Changes**: Update `db_init/init.sql` and run migrations
-4. **Testing**: Use the API documentation at `/docs` for testing endpoints
-
-### Code Organization
-- **Frontend**: React components with TypeScript
-- **Backend**: FastAPI with Pydantic models
-- **Database**: MariaDB with proper indexing
-- **ML**: scikit-learn for recommendation algorithms
-
-## 🚀 Deployment
-
-### Production Deployment
-1. Set up production environment variables
-2. Configure Google OAuth for production domain
-3. Use Docker Compose for production deployment
-4. Set up SSL certificates for HTTPS
-5. Configure database backups
-
-### Environment Variables for Production
-```env
-# Production database
-MARIADB_PASSWORD=strong_production_password
-
-# Production OAuth
-GOOGLE_CLIENT_ID=production_client_id
-GOOGLE_CLIENT_SECRET=production_client_secret
-
-# Production API URL
-BACKEND_API_URL=https://your-domain.com
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Database Connection Failed**
-   - Check MariaDB container is running: `docker-compose ps`
-   - Verify environment variables in `.env`
-
-2. **OAuth Login Not Working**
-   - Verify Google OAuth credentials in `.env`
-   - Check authorized redirect URIs in Google Console
-
-3. **Recommendations Not Loading**
-   - Check if user exists in database
-   - Verify recommendation engine is working
-   - Check API logs for errors
-
-4. **Frontend Not Loading**
-   - Check if Next.js container is running
-   - Verify port 3000 is not in use
-   - Check frontend logs
-
-### Logs and Debugging
-```bash
-# View all service logs
-docker-compose logs
-
-# View specific service logs
-docker-compose logs api
-docker-compose logs frontend
-docker-compose logs mariadb
-
-# Access API documentation
-open http://localhost:3009/docs
-```
-
-## 📝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🤝 Support
-
-For support and questions:
-- Check the API documentation at `/docs`
-- Review the troubleshooting section
-- Open an issue on GitHub
 
 ---
 
-**Built with ❤️ using Next.js, FastAPI, and MariaDB**
+## 🤝 Contributing
+
+- Fork the repo, create a feature branch, make changes, test, and submit a PR.
+- Please add tests and update docs as needed.
+
+## 📄 License
+
+MIT License. See LICENSE file.
+
+---
+
+**Built with ❤️ using Next.js, FastAPI, MariaDB, and scikit-learn.**
