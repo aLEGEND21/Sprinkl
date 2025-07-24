@@ -9,6 +9,11 @@ services:
       - ./db_init:/docker-entrypoint-initdb.d # MariaDB runs all .sql and .sh files in this directory on the first startup
     ports:
       - "3306:3306" # Expose so the DB can be accessed from the local machine in dev
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2 # Same as Python lib version
@@ -17,12 +22,18 @@ services:
     environment:
       - discovery.type=single-node # Set to single-node setup
       - xpack.security.enabled=false # Disable security
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m" # Set memory limits for Elasticsearch
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m" # Set memory limits for Elasticsearch
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200" # Access Elasticsearch from local machine so we can push data to it
       - "9300:9300"
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   api:
     build: ./api
@@ -32,8 +43,12 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - mariadb
-      - elasticsearch
+      mariadb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
     volumes:
       - ./api:/app # Mount for development - changes propagate automatically. Don't use --watch due to bugs w/ hot reload
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -53,9 +68,20 @@ services:
         - path: ./frontend
           target: /app
           action: sync
-    command: npm run dev
     depends_on:
       - api
+    command: npm run dev
+
+  init:
+    build: ./db_init
+    container_name: foodapp.init
+    env_file: .env
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    command: python init.py
 
 volumes:
   mariadb_data:

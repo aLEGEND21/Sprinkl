@@ -15,6 +15,4 @@ services:
       - "3040:3000"
     build:
       target: production
-    environment:
-      - NODE_ENV=production
     command: npm run start

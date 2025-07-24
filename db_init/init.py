@@ -4,6 +4,7 @@
 
 import json
 import os
+import sys
 import uuid
 
 import joblib  # To save/load scikit-learn models
@@ -20,11 +21,11 @@ load_dotenv()
 DB_NAME = os.getenv("MARIADB_DATABASE")
 DB_USER = os.getenv("MARIADB_USER")
 DB_PASSWORD = os.getenv("MARIADB_PASSWORD")
-DB_HOST = "localhost"
+DB_HOST = "mariadb"
 DB_PORT = 3306
 
 # Elasticsearch configuration
-ES_HOST = "localhost"
+ES_HOST = "elasticsearch"
 ES_PORT = 9200
 ES_INDEX = "recipes"
 
@@ -62,6 +63,30 @@ def safe_string(value):
 
 # --- Main Script ---
 if __name__ == "__main__":
+    # --- Check if recipes table is empty ---
+    try:
+        conn = pymysql.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            charset="utf8mb4",
+        )
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM recipes")
+        count = cursor.fetchone()[0]
+        if count > 0:
+            print(
+                f"Recipes table already contains {count} rows. Skipping initialization."
+            )
+            sys.exit(0)
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error checking recipes table: {e}")
+        sys.exit(1)
+
     all_recipes_raw_data = []  # To store all data for fitting vectorizers/encoders
 
     # First pass: Read all data to fit the vectorizers/encoders
