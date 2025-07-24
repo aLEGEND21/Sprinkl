@@ -1,15 +1,20 @@
 services:
   mariadb:
     ports: [] # Don't expose port to host machine. Services in Dockerfile can still access MariaDB though
+    networks:
+      - internal # Manually specify default network since we specified networks for api and frontend
 
   elasticsearch:
     ports: [] # See MariaDB ports comment
+    networks:
+      - internal
 
   api:
     ports:
       - "3041:8000"
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers
     networks:
+      - internal
       - nginx-proxy
 
   frontend:
@@ -22,6 +27,8 @@ services:
       - nginx-proxy
 
 networks:
+  internal:
+    driver: bridge
   nginx-proxy:
     name: nginx-proxy # Used for reverse proxy across multiple services
     external: true
