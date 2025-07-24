@@ -304,7 +304,7 @@ export default function LandingPage() {
             <span className="text-foreground text-lg font-bold">Food App</span>
           </div>
           <p className="text-muted-foreground text-sm">
-            © 2024 Food App. Made with ❤️ by{" "}
+            © {new Date().getFullYear()} Food App. Made with ❤️ by{" "}
             <Link
               href="https://github.com/aLEGEND21/"
               className="text-orange-500"
