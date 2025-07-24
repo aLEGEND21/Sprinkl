@@ -13,7 +13,6 @@ WORKDIR /app
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* bun.lockb* ./
 RUN npm install
 COPY . .
-COPY .env .env  # Copy .env file for build-time environment variables
 RUN npm run build
 
 # --- Production Stage ---

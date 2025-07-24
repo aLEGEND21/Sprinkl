@@ -18,6 +18,8 @@ services:
       - "3040:3000"
     build:
       target: production
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL} # Expose env var to frontend during build time so NEXT_PUBLIC_API_URL is available
     command: npm run start
     networks:
       - default
