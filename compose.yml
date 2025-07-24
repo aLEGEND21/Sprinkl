@@ -30,16 +30,32 @@ services:
     restart: always
     env_file: .env
     ports:
-      - "8000:8000" # Expose API on port 8000
+      - "8000:8000"
     depends_on:
       - mariadb
       - elasticsearch
-    environment:
-      - MARIADB_HOST=mariadb
-      - ES_HOST=elasticsearch
     volumes:
-      - ./api:/app # Mount for development - changes propagate automatically
+      - ./api:/app # Mount for development - changes propagate automatically. Don't use --watch due to bugs w/ hot reload
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development # Use 'development' for dev, 'production' for prod
+    container_name: foodapp.frontend
+    restart: always
+    env_file: .env
+    ports:
+      - "3000:3000"
+    develop:
+      watch:
+        - path: ./frontend
+          target: /app
+          action: sync
+    command: npm run dev
+    depends_on:
+      - api
 
 volumes:
   mariadb_data:

@@ -1,6 +1,5 @@
 # es_service.py - Elasticsearch service for recipe search functionality
 import logging
-import os
 from typing import Dict
 
 from dotenv import load_dotenv
@@ -13,21 +12,20 @@ logger = logging.getLogger(__name__)
 
 
 class ElasticsearchService:
+    ES_HOST = "elasticsearch"
+    ES_PORT = 9200
+    INDEX_NAME = "recipes"
+
     def __init__(self):
         """Initialize Elasticsearch connection"""
-        self.es_host = os.getenv("ES_HOST", "elasticsearch")
-        self.es_port = int(os.getenv("ES_PORT", "9200"))
-        self.index_name = "recipes"
-
-        # Initialize Elasticsearch client
-        self.es = Elasticsearch(f"http://{self.es_host}:{self.es_port}")
+        self.es = Elasticsearch(f"http://{self.ES_HOST}:{self.ES_PORT}")
 
         # Test connection
         if not self.es.ping():
             logger.error("Cannot connect to Elasticsearch")
             raise ConnectionError("Cannot connect to Elasticsearch")
 
-        logger.info(f"Connected to Elasticsearch at {self.es_host}:{self.es_port}")
+        logger.info(f"Connected to Elasticsearch at {self.ES_HOST}:{self.ES_PORT}")
 
     def search_recipes(
         self, query: str, page: int = 1, size: int = 10, fuzziness: str = "AUTO"
@@ -85,7 +83,7 @@ class ElasticsearchService:
             }
 
             # Execute search
-            response = self.es.search(index=self.index_name, body=search_body)
+            response = self.es.search(index=self.INDEX_NAME, body=search_body)
 
             # Extract results
             hits = response["hits"]["hits"]

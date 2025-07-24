@@ -20,12 +20,12 @@ load_dotenv()
 DB_NAME = os.getenv("MARIADB_DATABASE")
 DB_USER = os.getenv("MARIADB_USER")
 DB_PASSWORD = os.getenv("MARIADB_PASSWORD")
-DB_HOST = os.getenv("MARIADB_HOST", "localhost")
-DB_PORT = int(os.getenv("MARIADB_PORT", "3306"))
+DB_HOST = "localhost"
+DB_PORT = 3306
 
 # Elasticsearch configuration
-ES_HOST = os.getenv("ES_HOST", "localhost")
-ES_PORT = int(os.getenv("ES_PORT", "9200"))
+ES_HOST = "localhost"
+ES_PORT = 9200
 ES_INDEX = "recipes"
 
 # Path to your JSON file

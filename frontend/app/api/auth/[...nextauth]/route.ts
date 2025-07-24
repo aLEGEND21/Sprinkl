@@ -1,6 +1,5 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { notifyUserLogin } from "@/app/actions/auth";
 
 const handler = NextAuth({
   providers: [
@@ -39,32 +38,6 @@ const handler = NextAuth({
         (token.id as string) || session.user?.email || "unknown";
 
       return session;
-    },
-    async signIn({ user, account, profile }) {
-      // Call the server action to notify backend about user login
-      if (user && account) {
-        const userId =
-          profile && typeof profile === "object" && "id" in profile
-            ? (profile.id as string)
-            : profile && typeof profile === "object" && "sub" in profile
-              ? (profile.sub as string)
-              : user.email || user.id;
-
-        const session = {
-          user: {
-            id: userId,
-            email: user.email,
-            name: user.name,
-            image: user.image,
-          },
-          accessToken: account.access_token,
-        };
-
-        // Call the server action asynchronously (don't await to avoid blocking sign-in)
-        notifyUserLogin(session);
-      }
-
-      return true;
     },
   },
 });

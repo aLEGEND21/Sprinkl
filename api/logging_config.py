@@ -58,7 +58,7 @@ class JSONFormatter(logging.Formatter):
 
 
 def setup_logging(
-    level: Optional[str] = None,
+    level: str = "INFO",
     environment: Optional[str] = None,
     log_file: Optional[str] = None,
 ) -> None:
@@ -71,7 +71,6 @@ def setup_logging(
         log_file: Optional file path for file logging
     """
     # Get configuration from environment if not provided
-    level = level or os.getenv("LOG_LEVEL", "INFO").upper()
     environment = environment or os.getenv("ENV", "development")
 
     # Validate log level

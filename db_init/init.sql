@@ -3,8 +3,8 @@
 -- It sets up the database schema for the AI-powered food app.
 
 -- Create the main database
-CREATE DATABASE IF NOT EXISTS foodapp_db;
-USE foodapp_db;
+CREATE DATABASE IF NOT EXISTS foodapp;
+USE foodapp;
 
 -- 1. Recipes Table
 -- Stores all the recipe information from the JSON dataset.

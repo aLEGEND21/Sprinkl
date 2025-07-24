@@ -24,7 +24,7 @@ from rec_engine import RecommendationEngine
 load_dotenv()
 
 # Configure logging
-setup_logging()
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 
@@ -157,7 +157,7 @@ async def user_login(
     login_data: UserLoginRequest, db: DatabaseManager = Depends(get_db)
 ):
     """Add the user to the database if they don't exist and load their initial recommendations."""
-
+    print(f"Login data: {login_data}")
     # Create the user account in the database
     db.create_user_if_not_exists(
         user_id=login_data.user_id,

@@ -9,8 +9,8 @@ from models import Recipe
 
 # Load environment variables
 load_dotenv()
-MARIADB_HOST = os.getenv("MARIADB_HOST")
-MARIADB_PORT = os.getenv("MARIADB_PORT")
+MARIADB_HOST = "mariadb"
+MARIADB_PORT = 3306
 MARIADB_USER = os.getenv("MARIADB_USER")
 MARIADB_PASSWORD = os.getenv("MARIADB_PASSWORD")
 MARIADB_DATABASE = os.getenv("MARIADB_DATABASE")

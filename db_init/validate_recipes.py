@@ -13,11 +13,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # Load the database information
 load_dotenv()
-DB_NAME = os.getenv("MARIADB_DATABASE", "foodapp_db")
-DB_USER = os.getenv("MARIADB_USER", "root")
+DB_NAME = os.getenv("MARIADB_DATABASE")
+DB_USER = os.getenv("MARIADB_USER")
 DB_PASSWORD = os.getenv("MARIADB_PASSWORD")
-DB_HOST = os.getenv("MARIADB_HOST", "localhost")
-DB_PORT = int(os.getenv("MARIADB_PORT", "3306"))
+DB_HOST = "localhost"
+DB_PORT = 3306
 
 
 def clean_text(text):

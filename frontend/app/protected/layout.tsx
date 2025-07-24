@@ -10,13 +10,28 @@ export default function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     if (status === "unauthenticated") {
       signIn("google", { callbackUrl: pathname });
+    } else if (status === "authenticated") {
+      // Notify the backend about the user login so that their account can be created if needed
+      // This may run on every page nav/load, but it's not an issue for the backend
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: session?.user?.id,
+          email: session?.user?.email,
+          name: session?.user?.name,
+          image: session?.user?.image,
+        }),
+      });
     }
   }, [status, router, pathname]);
 
