@@ -17,15 +17,15 @@ class ElasticsearchService:
     INDEX_NAME = "recipes"
 
     def __init__(self):
-        """Initialize Elasticsearch connection"""
+        """Initialize Elasticsearch connection and wait for readiness"""
         self.es = Elasticsearch(f"http://{self.ES_HOST}:{self.ES_PORT}")
 
-        # Test connection
-        if not self.es.ping():
-            logger.error("Cannot connect to Elasticsearch")
-            raise ConnectionError("Cannot connect to Elasticsearch")
-
-        logger.info(f"Connected to Elasticsearch at {self.ES_HOST}:{self.ES_PORT}")
+        # Wait for cluster health to be at least yellow (ready for queries)
+        try:
+            self.es.cluster.health(wait_for_status="yellow", request_timeout=60)
+            logger.info(f"Connected to Elasticsearch at {self.ES_HOST}:{self.ES_PORT}")
+        except Exception as e:
+            logger.error(f"Unexpected error waiting for Elasticsearch: {e}")
 
     def search_recipes(
         self, query: str, page: int = 1, size: int = 10, fuzziness: str = "AUTO"

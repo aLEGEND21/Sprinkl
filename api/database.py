@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from typing import Dict, List, Optional
 
 import pymysql
@@ -30,6 +31,24 @@ class DatabaseManager:
             "database": MARIADB_DATABASE,
             "cursorclass": pymysql.cursors.DictCursor,
         }
+
+        # Wait for MariaDB to be ready
+        max_wait = 60  # seconds
+        start = time.time()
+        while True:
+            try:
+                conn = pymysql.connect(**self.db_config, connect_timeout=5)
+                conn.ping(reconnect=True)
+                conn.close()
+                logger.info(f"Connected to MariaDB at {MARIADB_HOST}:{MARIADB_PORT}")
+                break
+            except Exception as e:
+                if time.time() - start > max_wait:
+                    logger.error(
+                        f"Could not connect to MariaDB after {max_wait} seconds: {e}"
+                    )
+                logger.info("Waiting for MariaDB to be ready...")
+                time.sleep(2)
 
     def get_connection(self):
         """Get a database connection"""
