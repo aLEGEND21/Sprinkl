@@ -16,3 +16,8 @@ services:
     build:
       target: production
     command: npm run start
+
+networks:
+  nginx-proxy:
+    name: nginx-proxy # Used for reverse proxy across multiple services
+    external: true
