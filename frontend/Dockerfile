@@ -13,6 +13,11 @@ WORKDIR /app
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* bun.lockb* ./
 RUN npm install
 COPY . .
+
+# Expose env var to frontend during build time so NEXT_PUBLIC_API_URL is available
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
 RUN npm run build
 
 # --- Production Stage ---
