@@ -1,3 +1,4 @@
+// manifest.ts is used to generate manifest.json for PWA
 import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
@@ -9,6 +10,6 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     display: "standalone",
     background_color: "#EAEAEA",
-    theme_color: "#FFA500",
+    theme_color: "#FF6900",
   };
 }
