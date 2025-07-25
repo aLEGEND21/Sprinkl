@@ -59,20 +59,23 @@ export default function ProtectedLayout({
   }, [status, router, pathname]);
 
   return (
-    <div>
-      {/* pb-[73px] to account for height of bottom navigation */}
-      <div className="pb-[73px]">
-        {status === "authenticated" && userSynced ? (
-          children
-        ) : (
-          // Loading spinner
-          <div className="flex h-full w-full items-center justify-center py-40">
-            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-orange-500"></div>
-            {syncError && <div className="ml-4 text-red-500">{syncError}</div>}
-          </div>
-        )}
+    <div className="app-container">
+      <div className="app-content flex h-full flex-col">
+        <div className="flex-1 overflow-auto">
+          {status === "authenticated" && userSynced ? (
+            children
+          ) : (
+            // Loading spinner
+            <div className="flex h-full w-full items-center justify-center py-40">
+              <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-orange-500"></div>
+              {syncError && (
+                <div className="ml-4 text-red-500">{syncError}</div>
+              )}
+            </div>
+          )}
+        </div>
+        <BottomNavigation />
       </div>
-      <BottomNavigation />
     </div>
   );
 }
