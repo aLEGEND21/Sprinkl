@@ -39,7 +39,10 @@ export function BottomNavigation() {
   };
 
   return (
-    <div className="bg-background border-border safe-area-pb w-full border-t px-2 py-2">
+    <div
+      className="bg-background border-border w-full border-t px-2 py-2"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
       <div className="flex items-center justify-around">
         {navItems.map((item) => {
           const Icon = item.icon;
