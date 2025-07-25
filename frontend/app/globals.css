@@ -141,9 +141,7 @@ a mobile app experience on desktop. */
 @media (min-width: 640px) {
   .app-content {
     width: 22rem;
-    /* Use dynamic viewport height for better PWA/iOS support */
-    height: 100dvh;
-    max-height: 46rem;
+    height: 46rem;
     box-shadow: 0 0 24px rgba(0, 0, 0, 0.08);
     border-radius: 24px;
     display: flex;
