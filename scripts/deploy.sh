@@ -5,9 +5,15 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "🚀 Pulling latest changes from GitHub..."
-git pull origin master
+if ! git pull origin master; then
+    echo "❌ Failed to pull latest changes from GitHub"
+    exit 1
+fi
 
 echo "🐳 Building and starting Docker Compose services..."
-docker compose -f compose.yml -f compose.prod.yml up -d --build
+if ! docker compose -f compose.yml -f compose.prod.yml up -d --build; then
+    echo "❌ Failed to build and start Docker Compose services"
+    exit 1
+fi
 
 echo "✅ Deployment complete!"

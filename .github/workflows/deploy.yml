@@ -19,5 +19,20 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            set -e
             cd ~/FoodApp
-            bash scripts/deploy.sh || bash scripts/rollback.sh
+
+            echo "🚀 Starting deployment..."
+
+            # Run deployment script and capture exit code
+            if bash scripts/deploy.sh; then
+              echo "✅ Deployment completed successfully"
+            else
+              echo "❌ Deployment failed, initiating rollback..."
+              if bash scripts/rollback.sh; then
+                echo "✅ Rollback completed successfully"
+              else
+                echo "❌ Rollback also failed - manual intervention required"
+                exit 1
+              fi
+            fi
