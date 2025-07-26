@@ -1,8 +1,32 @@
+import argparse
 import json
 import re
 
-RAW_JSON_FILEPATH = "./raw_recipes.json"
-CLEANED_JSON_FILEPATH = "./cleaned_recipes.json"
+
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(
+        description="Clean and validate recipe data from JSON files"
+    )
+    parser.add_argument(
+        "-r",
+        "--raw",
+        required=True,
+        help="Path to the raw JSON file",
+    )
+    parser.add_argument(
+        "-c",
+        "--cleaned",
+        required=True,
+        help="Path to save the cleaned JSON file",
+    )
+    parser.add_argument(
+        "-i",
+        "--invalid",
+        required=True,
+        help="Path to save the invalid recipes JSON file",
+    )
+    return parser.parse_args()
 
 
 def is_valid_string(value, min_length=1):
@@ -108,11 +132,13 @@ def clean_recipe(recipe):
     """Clean and normalize recipe data"""
     cleaned = recipe.copy()
 
-    # For Zestful Kitchen, older recipes have an image size of 225x225 which we need to replace with 1000x1099
+    # Update recipe image URL to higher resolution images
     website = recipe.get("host")
     img_url = recipe.get("image")
     if website == "zestfulkitchen.com" and img_url and "225x225" in img_url:
         cleaned["image"] = img_url.replace("225x225", "1000x1099")
+    elif website == "zenbelly.com" and img_url and "-225x225" in img_url:
+        cleaned["image"] = img_url.replace("-225x225", "")
 
     # Ensure ingredients is a list
     if not isinstance(cleaned.get("ingredients"), list):
@@ -151,66 +177,72 @@ def clean_recipe(recipe):
     return cleaned
 
 
-# Load the recipes
-print("Loading recipes...")
-with open(RAW_JSON_FILEPATH, "r") as f:
-    recipes: dict[str, dict] = json.load(f)
+if __name__ == "__main__":
+    # Parse command line arguments
+    args = parse_arguments()
+    RAW_JSON_FILEPATH = args.raw
+    CLEANED_JSON_FILEPATH = args.cleaned
+    INVALID_JSON_FILEPATH = args.invalid
 
-print(f"Loaded {len(recipes)} recipes")
+    # Load the recipes
+    print("Loading recipes...")
+    with open(RAW_JSON_FILEPATH, "r") as f:
+        recipes: dict[str, dict] = json.load(f)
 
-# Clean and validate recipes
-cleaned_recipes = {}
-invalid_recipes = []
-validation_stats = {"total": len(recipes), "valid": 0, "invalid": 0, "errors": {}}
+    print(f"Loaded {len(recipes)} recipes")
 
-for url, recipe in recipes.items():
-    # Clean the recipe first
-    cleaned_recipe = clean_recipe(recipe)
+    # Clean and validate recipes
+    cleaned_recipes = {}
+    invalid_recipes = []
+    validation_stats = {"total": len(recipes), "valid": 0, "invalid": 0, "errors": {}}
 
-    # Validate the cleaned recipe
-    errors = validate_recipe(cleaned_recipe)
+    for url, recipe in recipes.items():
+        # Clean the recipe first
+        cleaned_recipe = clean_recipe(recipe)
 
-    if errors:
-        invalid_recipes.append(
-            {"url": url, "title": recipe.get("title", "Unknown"), "errors": errors}
-        )
-        validation_stats["invalid"] += 1
+        # Validate the cleaned recipe
+        errors = validate_recipe(cleaned_recipe)
 
-        # Track error types for reporting
-        for error in errors:
-            if error not in validation_stats["errors"]:
-                validation_stats["errors"][error] = 0
-            validation_stats["errors"][error] += 1
-    else:
-        cleaned_recipes[url] = cleaned_recipe
-        validation_stats["valid"] += 1
+        if errors:
+            invalid_recipes.append(
+                {"url": url, "title": recipe.get("title", "Unknown"), "errors": errors}
+            )
+            validation_stats["invalid"] += 1
 
-# Print validation results
-print("\nValidation Results:")
-print(f"Total recipes: {validation_stats['total']}")
-print(f"Valid recipes: {validation_stats['valid']}")
-print(f"Invalid recipes: {validation_stats['invalid']}")
-print(
-    f"Success rate: {(validation_stats['valid'] / validation_stats['total'] * 100):.1f}%"
-)
+            # Track error types for reporting
+            for error in errors:
+                if error not in validation_stats["errors"]:
+                    validation_stats["errors"][error] = 0
+                validation_stats["errors"][error] += 1
+        else:
+            cleaned_recipes[url] = cleaned_recipe
+            validation_stats["valid"] += 1
 
-if validation_stats["errors"]:
-    print("\nError breakdown:")
-    for error, count in sorted(
-        validation_stats["errors"].items(), key=lambda x: x[1], reverse=True
-    ):
-        print(f"  {error}: {count} recipes")
+    # Print validation results
+    print("\nValidation Results:")
+    print(f"Total recipes: {validation_stats['total']}")
+    print(f"Valid recipes: {validation_stats['valid']}")
+    print(f"Invalid recipes: {validation_stats['invalid']}")
+    print(
+        f"Success rate: {(validation_stats['valid'] / validation_stats['total'] * 100):.1f}%"
+    )
 
-# Save the cleaned recipes
-print(f"\nSaving {len(cleaned_recipes)} valid recipes...")
-with open(CLEANED_JSON_FILEPATH, "w") as f:
-    json.dump(cleaned_recipes, f, indent=4)
+    if validation_stats["errors"]:
+        print("\nError breakdown:")
+        for error, count in sorted(
+            validation_stats["errors"].items(), key=lambda x: x[1], reverse=True
+        ):
+            print(f"  {error}: {count} recipes")
 
-print(f"Cleaned recipes saved to {CLEANED_JSON_FILEPATH}")
+    # Save the cleaned recipes
+    print(f"\nSaving {len(cleaned_recipes)} valid recipes...")
+    with open(CLEANED_JSON_FILEPATH, "w") as f:
+        json.dump(cleaned_recipes, f, indent=4)
 
-# Optionally save invalid recipes for analysis
-if invalid_recipes:
-    invalid_filepath = "./invalid_recipes.json"
-    with open(invalid_filepath, "w") as f:
-        json.dump(invalid_recipes, f, indent=4)
-    print(f"Invalid recipes saved to {invalid_filepath} for analysis")
+    print(f"Cleaned recipes saved to {CLEANED_JSON_FILEPATH}")
+
+    # Save invalid recipes for analysis
+    if invalid_recipes:
+        with open(INVALID_JSON_FILEPATH, "w") as f:
+            json.dump(invalid_recipes, f, indent=4)
+        print(f"Invalid recipes saved to {INVALID_JSON_FILEPATH} for analysis")
