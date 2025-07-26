@@ -1,8 +1,11 @@
 # main.py - FastAPI application for recipe recommendations
 import logging
+import sys
+import tracemalloc
 from datetime import datetime
 from typing import Optional
 
+import psutil
 from database import DatabaseManager
 from dotenv import load_dotenv
 from es_service import ElasticsearchService
@@ -26,6 +29,9 @@ load_dotenv()
 # Configure logging
 setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
+
+# Start memory tracking
+tracemalloc.start()
 
 
 # Initialize FastAPI app
@@ -74,6 +80,54 @@ def get_es_service():
 async def root():
     """Health check endpoint"""
     return {"message": "Food Recommendation API is running!", "status": "healthy"}
+
+
+@app.get("/memory")
+async def get_memory_usage():
+    """Get detailed memory usage information"""
+    # Get process memory info
+    process = psutil.Process()
+    memory_info = process.memory_info()
+
+    # Get tracemalloc statistics
+    current, peak = tracemalloc.get_traced_memory()
+
+    # Calculate memory usage of key objects
+    def get_object_size(obj):
+        return round(sys.getsizeof(obj) / (1024 * 1024), 2)  # Convert to MB
+
+    memory_breakdown = {
+        "process_rss": round(
+            memory_info.rss / (1024 * 1024), 2
+        ),  # Resident Set Size in MB
+        "process_vms": round(
+            memory_info.vms / (1024 * 1024), 2
+        ),  # Virtual Memory Size in MB
+        "tracemalloc_current": round(
+            current / (1024 * 1024), 2
+        ),  # Current traced memory in MB
+        "tracemalloc_peak": round(peak / (1024 * 1024), 2),  # Peak traced memory in MB
+        "recommendation_engine": {
+            "id_vec_map": get_object_size(recommendation_engine.id_vec_map),
+            "id_title_map": get_object_size(recommendation_engine.id_title_map),
+            "recipe_ids": get_object_size(recommendation_engine.recipe_ids),
+            "feature_matrix": get_object_size(recommendation_engine.feature_matrix),
+        },
+    }
+
+    return {
+        "memory_usage_mb": memory_breakdown,
+        "system_info": {
+            "python_version": sys.version,
+            "platform": sys.platform,
+        },
+        "recommendation_engine_info": {
+            "num_recipes": len(recommendation_engine.recipe_ids),
+            "feature_matrix_shape": recommendation_engine.feature_matrix.shape
+            if recommendation_engine.feature_matrix is not None
+            else None,
+        },
+    }
 
 
 @app.get("/reset")
