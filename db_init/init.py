@@ -184,7 +184,7 @@ if __name__ == "__main__":
                 cursor.execute(
                     "SELECT COUNT(*) FROM recipes WHERE id = %s", (recipe_id,)
                 )
-                count = cursor.fetchone()["COUNT(*)"]
+                count = cursor.fetchone()[0]
                 if count > 0:
                     print(
                         f"Recipe with ID {recipe_id} already exists, skipping: {recipe.get('title', 'Unknown')}"
@@ -272,9 +272,7 @@ if __name__ == "__main__":
                     print(f"Inserted {inserted_count} recipes...")
 
             except Exception as e:
-                print(
-                    f"Error inserting recipe (ID: {recipe_id if 'recipe_id' in locals() else 'N/A'}): {e}"
-                )
+                print(f"Error inserting recipe (ID: {recipe.get('id', 'N/A')}): {e}")
                 print(f"Recipe data causing error: {recipe}")
                 continue
 

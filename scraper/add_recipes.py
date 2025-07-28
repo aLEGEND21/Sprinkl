@@ -27,7 +27,8 @@ def add_recipes_from_file(file_path: str) -> None:
     data = resp.json()
 
     # Truncate the recipe IDs since there may be too many
-    data["recipe_ids"] = data["recipe_ids"][:10]
+    if "recipe_ids" in data:
+        data["recipe_ids"] = data["recipe_ids"][:10]
     print(json.dumps(data, indent=4))
 
 
