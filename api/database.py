@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 import pymysql
 from dotenv import load_dotenv
 from models import Recipe
+from pymysql import err as pymysql_err
 
 # Load environment variables
 load_dotenv()
@@ -153,7 +154,7 @@ class DatabaseManager:
                     conn.commit()
                     logger.info(f"User {user_id} saved recipe {recipe_id}")
                     return True
-                except pymysql.err.IntegrityError:
+                except pymysql_err.IntegrityError:
                     # Recipe already saved by this user
                     logger.info(f"Recipe {recipe_id} already saved by user {user_id}")
                     return False
@@ -248,3 +249,71 @@ class DatabaseManager:
                 cursor.execute("SELECT id, title FROM recipes")
                 res = cursor.fetchall()
                 return {dict_["id"]: dict_["title"] for dict_ in res}
+
+    def add_multiple_recipes(self, recipes_data: List[Dict]) -> List[str]:
+        """
+        Add multiple recipes to the database efficiently using batch insert
+
+        Args:
+            recipes_data: List of dictionaries containing recipe information
+
+        Returns:
+            List[str]: List of recipe IDs that were successfully added
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                recipe_ids = []
+                for recipe_data in recipes_data:
+                    try:
+                        cursor.execute(
+                            """
+                            INSERT INTO recipes (
+                                id, title, description, recipe_url, image_url, ingredients, instructions,
+                                category, cuisine, site_name, keywords, dietary_restrictions,
+                                total_time, overall_rating, feature_vector
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                            (
+                                recipe_data["id"],
+                                recipe_data["title"],
+                                recipe_data["description"],
+                                recipe_data["recipe_url"],
+                                recipe_data["image_url"],
+                                recipe_data["ingredients"],
+                                recipe_data["instructions"],
+                                recipe_data["category"],
+                                recipe_data["cuisine"],
+                                recipe_data["site_name"],
+                                recipe_data["keywords"],
+                                recipe_data["dietary_restrictions"],
+                                recipe_data["total_time"],
+                                recipe_data["overall_rating"],
+                                recipe_data["feature_vector"],
+                            ),
+                        )
+                        recipe_ids.append(recipe_data["id"])
+                    except pymysql_err.IntegrityError as e:
+                        if e.args[0] == 1062:  # Duplicate entry error
+                            logger.warning(
+                                f"Recipe with ID {recipe_data['id']} already exists, skipping"
+                            )
+                            continue
+                        else:
+                            raise
+                    except Exception as e:
+                        logger.error(f"Error adding recipe {recipe_data['id']}: {e}")
+                        continue
+
+                conn.commit()
+                logger.info(f"Successfully added {len(recipe_ids)} recipes to database")
+                return recipe_ids
+
+    def recipe_exists(self, recipe_id: str) -> bool:
+        """Check if a recipe exists in the database"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM recipes WHERE id = %s", (recipe_id,)
+                )
+                count = cursor.fetchone()["COUNT(*)"]
+                return count > 0

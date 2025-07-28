@@ -1,6 +1,7 @@
 import argparse
 import json
 import re
+import uuid
 
 
 def parse_arguments():
@@ -27,6 +28,28 @@ def parse_arguments():
         help="Path to save the invalid recipes JSON file",
     )
     return parser.parse_args()
+
+
+# --- Helper Functions ---
+def safe_int(value):
+    """Safely convert value to int, return None if conversion fails"""
+    try:
+        return int(float(value)) if value and value != "" else None
+    except (ValueError, TypeError):
+        return None
+
+
+def safe_float(value):
+    """Safely convert value to float, return None if conversion fails"""
+    try:
+        return float(value) if value and value != "" else None
+    except (ValueError, TypeError):
+        return None
+
+
+def safe_string(value):
+    """Safely convert value to string, return empty string if None"""
+    return str(value) if value is not None else ""
 
 
 def is_valid_string(value, min_length=1):
@@ -177,6 +200,36 @@ def clean_recipe(recipe):
     return cleaned
 
 
+def format_recipe(recipe, url):
+    """Format a cleaned recipe for direct database insertion"""
+    recipe_id = str(uuid.uuid4())
+
+    # Map JSON fields to database columns according to the database structure
+    recipe_data = {
+        "id": recipe_id,
+        "title": safe_string(recipe.get("title", "")).strip(),
+        "description": safe_string(recipe.get("description", "")).strip(),
+        "recipe_url": safe_string(url).strip(),  # Use the URL as the key
+        "image_url": safe_string(recipe.get("image", "")).strip(),
+        "ingredients": recipe.get(
+            "ingredients", []
+        ),  # Keep as list for JSON serialization
+        "instructions": recipe.get(
+            "instructions_list", []
+        ),  # Keep as list for JSON serialization
+        "category": safe_string(recipe.get("category", "")).strip(),
+        "cuisine": safe_string(recipe.get("cuisine", "")).strip(),
+        "site_name": safe_string(recipe.get("site_name", "")).strip(),
+        "keywords": recipe.get("keywords", []),  # Keep as list for JSON serialization
+        "dietary_restrictions": [],  # Not present in current data
+        "total_time": safe_int(recipe.get("total_time")),
+        "overall_rating": safe_float(recipe.get("ratings")),
+        "feature_vector": None,  # Will be calculated during ML model training
+    }
+
+    return recipe_data
+
+
 if __name__ == "__main__":
     # Parse command line arguments
     args = parse_arguments()
@@ -215,7 +268,9 @@ if __name__ == "__main__":
                     validation_stats["errors"][error] = 0
                 validation_stats["errors"][error] += 1
         else:
-            cleaned_recipes[url] = cleaned_recipe
+            # Format the recipe for database insertion
+            formatted_recipe = format_recipe(cleaned_recipe, url)
+            cleaned_recipes[url] = formatted_recipe
             validation_stats["valid"] += 1
 
     # Print validation results

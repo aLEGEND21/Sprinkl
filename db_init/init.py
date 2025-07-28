@@ -5,7 +5,6 @@
 import json
 import os
 import sys
-import uuid
 
 import joblib  # To save/load scikit-learn models
 import numpy as np
@@ -33,9 +32,7 @@ ES_INDEX = "recipes"
 JSON_FILE_PATH = "init_dataset.json"
 
 # Directory to save fitted ML models (vectorizers, encoders)
-ML_MODELS_DIR = (
-    "../ml_models"  # Store in project root since the API will use these models
-)
+ML_MODELS_DIR = "/app/ml_models"  # Path within the container
 os.makedirs(ML_MODELS_DIR, exist_ok=True)  # Create directory if it doesn't exist
 
 
@@ -96,7 +93,7 @@ if __name__ == "__main__":
             recipes_data = json.load(jsonfile)
             # Convert the dictionary to a list of recipes with their URLs as keys
             for url, recipe in recipes_data.items():
-                recipe["recipe_url"] = url  # Add the URL to the recipe data
+                # The recipe is already formatted for database insertion
                 all_recipes_raw_data.append(recipe)
         print(f"Finished reading {len(all_recipes_raw_data)} recipes from JSON.")
     except FileNotFoundError:
@@ -114,8 +111,7 @@ if __name__ == "__main__":
         " ".join(row.get("ingredients", [])).strip() for row in all_recipes_raw_data
     ]
     instructions_text = [
-        " ".join(row.get("instructions_list", [])).strip()
-        for row in all_recipes_raw_data
+        " ".join(row.get("instructions", [])).strip() for row in all_recipes_raw_data
     ]
     cuisines = [
         safe_string(row.get("cuisine", "")).strip() for row in all_recipes_raw_data
@@ -132,39 +128,33 @@ if __name__ == "__main__":
         stop_words="english", max_features=1000
     )  # Limit features to avoid very high dimensionality
     title_vectorizer.fit(recipe_titles)
-    joblib.dump(
-        title_vectorizer, os.path.join(ML_MODELS_DIR, "title_vectorizer.joblib")
-    )
+    title_path = os.path.join(ML_MODELS_DIR, "title_vectorizer.joblib")
+    joblib.dump(title_vectorizer, title_path)
 
     # TF-IDF for Ingredients
     ingredients_vectorizer = TfidfVectorizer(stop_words="english", max_features=2000)
     ingredients_vectorizer.fit(ingredients_text)
-    joblib.dump(
-        ingredients_vectorizer,
-        os.path.join(ML_MODELS_DIR, "ingredients_vectorizer.joblib"),
-    )
+    ingredients_path = os.path.join(ML_MODELS_DIR, "ingredients_vectorizer.joblib")
+    joblib.dump(ingredients_vectorizer, ingredients_path)
 
     # TF-IDF for Instructions
     instructions_vectorizer = TfidfVectorizer(stop_words="english", max_features=3000)
     instructions_vectorizer.fit(instructions_text)
-    joblib.dump(
-        instructions_vectorizer,
-        os.path.join(ML_MODELS_DIR, "instructions_vectorizer.joblib"),
-    )
+    instructions_path = os.path.join(ML_MODELS_DIR, "instructions_vectorizer.joblib")
+    joblib.dump(instructions_vectorizer, instructions_path)
 
     # TF-IDF for Description
     description_vectorizer = TfidfVectorizer(stop_words="english", max_features=1000)
     description_vectorizer.fit(descriptions)
-    joblib.dump(
-        description_vectorizer,
-        os.path.join(ML_MODELS_DIR, "description_vectorizer.joblib"),
-    )
+    description_path = os.path.join(ML_MODELS_DIR, "description_vectorizer.joblib")
+    joblib.dump(description_vectorizer, description_path)
 
     # One-Hot Encoder for Cuisine
     # Reshape to 2D array as required by OneHotEncoder
     cuisine_encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
     cuisine_encoder.fit(np.array(cuisines).reshape(-1, 1))
-    joblib.dump(cuisine_encoder, os.path.join(ML_MODELS_DIR, "cuisine_encoder.joblib"))
+    cuisine_path = os.path.join(ML_MODELS_DIR, "cuisine_encoder.joblib")
+    joblib.dump(cuisine_encoder, cuisine_path)
 
     print("ML Models fitted and saved successfully.")
 
@@ -187,7 +177,20 @@ if __name__ == "__main__":
         recipe_ids = {}  # Store recipe IDs to use in Elasticsearch
         for i, recipe in enumerate(all_recipes_raw_data):
             try:
-                recipe_id = str(uuid.uuid4())
+                # Use the pre-generated UUID from the formatted recipe
+                recipe_id = recipe["id"]
+
+                # Check if recipe already exists
+                cursor.execute(
+                    "SELECT COUNT(*) FROM recipes WHERE id = %s", (recipe_id,)
+                )
+                count = cursor.fetchone()["COUNT(*)"]
+                if count > 0:
+                    print(
+                        f"Recipe with ID {recipe_id} already exists, skipping: {recipe.get('title', 'Unknown')}"
+                    )
+                    continue
+
                 recipe_ids[i] = recipe_id  # Store the ID for Elasticsearch
 
                 # --- Generate Feature Vector for Current Recipe ---
@@ -199,7 +202,9 @@ if __name__ == "__main__":
                     [" ".join(recipe.get("ingredients", [])).strip()]
                 ).toarray()
                 instructions_vec = instructions_vectorizer.transform(
-                    [" ".join(recipe.get("instructions_list", [])).strip()]
+                    [
+                        " ".join(recipe.get("instructions", [])).strip()
+                    ]  # Note: field name changed
                 ).toarray()
                 description_vec = description_vectorizer.transform(
                     [safe_string(recipe.get("description", "")).strip()]
@@ -224,26 +229,9 @@ if __name__ == "__main__":
                     ]
                 ).tolist()  # Convert to list for JSON serialization
 
-                # Map JSON fields to database columns according to the new structure
-                recipe_data = {
-                    "id": recipe_id,
-                    "title": safe_string(recipe.get("title", "")).strip(),
-                    "description": safe_string(recipe.get("description", "")).strip(),
-                    "recipe_url": safe_string(recipe.get("canonical_url", "")).strip(),
-                    "image_url": safe_string(recipe.get("image", "")).strip(),
-                    "ingredients": json.dumps(recipe.get("ingredients", [])),
-                    "instructions": json.dumps(recipe.get("instructions_list", [])),
-                    "category": safe_string(recipe.get("category", "")).strip(),
-                    "cuisine": safe_string(recipe.get("cuisine", "")).strip(),
-                    "site_name": safe_string(recipe.get("site_name", "")).strip(),
-                    "keywords": json.dumps(recipe.get("keywords", [])),
-                    "dietary_restrictions": json.dumps(
-                        []
-                    ),  # Not present in current data
-                    "total_time": safe_int(recipe.get("total_time")),
-                    "overall_rating": safe_float(recipe.get("ratings")),
-                    "feature_vector": json.dumps(combined_feature_vector),
-                }
+                # Use the pre-formatted recipe data and add the feature vector
+                recipe_data = recipe.copy()
+                recipe_data["feature_vector"] = json.dumps(combined_feature_vector)
 
                 # Insert the data into the database
                 cursor.execute(
@@ -260,13 +248,19 @@ if __name__ == "__main__":
                         recipe_data["description"],
                         recipe_data["recipe_url"],
                         recipe_data["image_url"],
-                        recipe_data["ingredients"],
-                        recipe_data["instructions"],
+                        json.dumps(
+                            recipe_data["ingredients"]
+                        ),  # Serialize list to JSON
+                        json.dumps(
+                            recipe_data["instructions"]
+                        ),  # Serialize list to JSON
                         recipe_data["category"],
                         recipe_data["cuisine"],
                         recipe_data["site_name"],
-                        recipe_data["keywords"],
-                        recipe_data["dietary_restrictions"],
+                        json.dumps(recipe_data["keywords"]),  # Serialize list to JSON
+                        json.dumps(
+                            recipe_data["dietary_restrictions"]
+                        ),  # Serialize list to JSON
                         recipe_data["total_time"],
                         recipe_data["overall_rating"],
                         recipe_data["feature_vector"],

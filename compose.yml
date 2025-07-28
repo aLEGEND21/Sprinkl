@@ -51,6 +51,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./api:/app # Mount for development - changes propagate automatically. Don't use --watch due to bugs w/ hot reload
+      - ml_models:/app/ml_models # Shared volume for ML models
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
@@ -82,8 +83,11 @@ services:
       elasticsearch:
         condition: service_healthy
     restart: "no"
+    volumes:
+      - ml_models:/app/ml_models # Shared volume for ML models
     command: python init.py
 
 volumes:
   mariadb_data:
   elasticsearch_data:
+  ml_models: # Shared volume for ML models between API and init containers

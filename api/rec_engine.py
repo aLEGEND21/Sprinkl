@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RecommendationEngine:
     def __init__(self, db: DatabaseManager):
+        self.db = db  # Store database reference for refresh
         self.id_vec_map = db.get_all_feature_vectors()
         self.id_title_map = (
             db.get_all_recipe_titles()
@@ -182,3 +183,99 @@ class RecommendationEngine:
             )
 
         return [r_id for r_id, _ in top_recommendations]
+
+    def find_most_similar_recipe(
+        self, recipe_id: str, exclude_self: bool = True
+    ) -> tuple:
+        """
+        Find the most similar recipe to the given recipe using cosine similarity.
+
+        Args:
+            recipe_id: ID of the recipe to find similar recipes for
+            exclude_self: Whether to exclude the recipe itself from results
+
+        Returns:
+            Tuple of (similar_recipe_id, similarity_score, similar_recipe_title) or (None, 0, None) if not found
+        """
+        if self.feature_matrix is None:
+            logger.error("Feature matrix not available")
+            return None, 0, None
+
+        # Find the index of the target recipe
+        if recipe_id not in self.recipe_ids:
+            logger.warning(f"Recipe {recipe_id} not found in feature matrix")
+            return None, 0, None
+
+        target_index = self.recipe_ids.index(recipe_id)
+        target_vector = self.feature_matrix[target_index]
+
+        # Calculate cosine similarity with all other recipes
+        similarities = cosine_similarity([target_vector], self.feature_matrix)[0]
+
+        # Create list of (recipe_id, similarity_score) tuples
+        recipe_similarities = []
+        for i, similarity_score in enumerate(similarities):
+            current_recipe_id = self.recipe_ids[i]
+
+            # Skip the recipe itself if exclude_self is True
+            if exclude_self and current_recipe_id == recipe_id:
+                continue
+
+            recipe_similarities.append((current_recipe_id, similarity_score))
+
+        # Sort by similarity score (descending) and get the most similar
+        if not recipe_similarities:
+            return None, 0, None
+
+        recipe_similarities.sort(key=lambda x: x[1], reverse=True)
+        most_similar_id, similarity_score = recipe_similarities[0]
+        most_similar_title = self.id_title_map.get(most_similar_id, "Unknown")
+
+        logger.info(
+            f"Most similar recipe to {recipe_id}: {most_similar_title} ({most_similar_id}) with similarity {similarity_score:.4f}"
+        )
+
+        return most_similar_id, similarity_score, most_similar_title
+
+    def refresh_models(self):
+        """
+        Refresh the recommendation engine with updated data from the database.
+        This should be called when new recipes are added to ensure the engine
+        has the latest feature vectors.
+        """
+        logger.info("Refreshing recommendation engine models...")
+
+        # Reload data from database
+        self.id_vec_map = self.db.get_all_feature_vectors()
+        self.id_title_map = self.db.get_all_recipe_titles()
+
+        # Rebuild feature matrix
+        feature_vectors = []
+        self.recipe_ids = []
+
+        for recipe_id, feature_vector_json in self.id_vec_map.items():
+            try:
+                feature_vector = json.loads(feature_vector_json)
+                if isinstance(feature_vector, list):
+                    feature_vectors.append(feature_vector)
+                    self.recipe_ids.append(recipe_id)
+                else:
+                    logger.warning(
+                        f"Feature vector for recipe {recipe_id} is not a list"
+                    )
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(
+                    f"Error parsing feature vector for recipe {recipe_id}: {e}"
+                )
+                continue
+
+        # Convert to numpy array
+        if feature_vectors:
+            self.feature_matrix = np.array(feature_vectors)
+            logger.info(
+                f"Feature matrix refreshed with shape: {self.feature_matrix.shape}"
+            )
+            logger.info(f"Number of recipes processed: {len(self.recipe_ids)}")
+        else:
+            logger.error("No valid feature vectors found during refresh")
+            self.feature_matrix = None

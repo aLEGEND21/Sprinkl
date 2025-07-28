@@ -21,6 +21,56 @@ class Recipe(BaseModel):
     overall_rating: Optional[float] = None
 
 
+class RecipeSummary(BaseModel):
+    """Simplified recipe model with only essential fields"""
+
+    id: str
+    title: str
+
+
+class RecipeCreateRequest(BaseModel):
+    """Model for creating a new recipe"""
+
+    id: str
+    title: str
+    description: Optional[str] = None
+    recipe_url: Optional[str] = None
+    image_url: Optional[str] = None
+    ingredients: List[str]
+    instructions: List[str]
+    category: Optional[str] = None
+    cuisine: Optional[str] = None
+    site_name: Optional[str] = None
+    keywords: List[str] = []
+    dietary_restrictions: List[str] = []
+    total_time: Optional[int] = None
+    overall_rating: Optional[float] = None
+
+
+class RecipeBatchCreateRequest(BaseModel):
+    """Model for creating multiple recipes"""
+
+    recipes: List[RecipeCreateRequest]
+
+
+class RecipeBatchCreateResponse(BaseModel):
+    """Response model for batch recipe creation"""
+
+    message: str
+    added_count: int
+    skipped_count: int
+    recipe_ids: List[str]
+    errors: List[str] = []
+    # Similarity information for a randomly selected recipe
+    sample_recipe_id: Optional[str] = None
+    sample_recipe_title: Optional[str] = None
+    similar_recipe_id: Optional[str] = None
+    similar_recipe_title: Optional[str] = None
+    similarity_score: Optional[float] = None
+    # Performance metrics
+    total_time_seconds: float
+
+
 class SearchResponse(BaseModel):
     query: str
     results: List[Recipe]

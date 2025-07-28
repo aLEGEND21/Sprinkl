@@ -95,6 +95,12 @@ docker-compose up --build
 - MariaDB: localhost:3306
 - Elasticsearch: localhost:9200
 
+**Note**: The application uses a shared Docker volume (`ml_models`) to store ML models between the API and database initialization containers. This ensures that:
+
+- The `db_init` container can save trained ML models
+- The `api` container can load and use these models for recipe recommendations
+- Models persist across container restarts
+
 ### 4. Local Development (Hot Reload)
 
 #### Frontend

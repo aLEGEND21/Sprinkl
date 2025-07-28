@@ -20,6 +20,74 @@ class ElasticsearchService:
         """Initialize Elasticsearch connection and wait for readiness"""
         self.es = Elasticsearch(f"http://{self.ES_HOST}:{self.ES_PORT}")
 
+    def index_recipe(self, recipe_id: str, title: str) -> bool:
+        """
+        Index a recipe in Elasticsearch for search functionality
+
+        Args:
+            recipe_id: Unique identifier for the recipe
+            title: Recipe title for search indexing
+
+        Returns:
+            bool: True if indexing was successful, False otherwise
+        """
+        try:
+            # Create document for Elasticsearch
+            doc = {
+                "id": recipe_id,
+                "title": title,
+            }
+
+            # Index the document
+            self.es.index(index=self.INDEX_NAME, body=doc)
+
+            # Refresh the index to make document searchable immediately
+            self.es.indices.refresh(index=self.INDEX_NAME)
+
+            logger.info(
+                f"Successfully indexed recipe in Elasticsearch with ID: {recipe_id}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to index recipe in Elasticsearch: {e}")
+            return False
+
+    def create_index_if_not_exists(self) -> bool:
+        """
+        Create the recipes index if it doesn't exist
+
+        Returns:
+            bool: True if index exists or was created successfully, False otherwise
+        """
+        try:
+            # Check if index exists
+            if not self.es.indices.exists(index=self.INDEX_NAME):
+                # Define the mapping for recipe titles
+                mapping = {
+                    "mappings": {
+                        "properties": {
+                            "id": {"type": "keyword"},
+                            "title": {
+                                "type": "text",
+                                "analyzer": "standard",
+                                "search_analyzer": "standard",
+                            },
+                        }
+                    }
+                }
+
+                self.es.indices.create(index=self.INDEX_NAME, body=mapping)
+                logger.info(f"Created Elasticsearch index: {self.INDEX_NAME}")
+            else:
+                logger.info(f"Elasticsearch index {self.INDEX_NAME} already exists")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error creating Elasticsearch index: {e}")
+            return False
+
     def search_recipes(
         self, query: str, page: int = 1, size: int = 10, fuzziness: str = "AUTO"
     ) -> Dict:

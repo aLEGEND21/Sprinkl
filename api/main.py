@@ -1,9 +1,11 @@
 # main.py - FastAPI application for recipe recommendations
 import logging
+import random
 import sys
+import time
 import tracemalloc
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 import psutil
 from database import DatabaseManager
@@ -14,6 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from logging_config import setup_logging
 from models import (
     Recipe,
+    RecipeBatchCreateResponse,
+    RecipeCreateRequest,
     RecommendationResponse,
     UserFeedbackRequest,
     UserFeedbackResponse,
@@ -22,6 +26,7 @@ from models import (
     UserStatsResponse,
 )
 from rec_engine import RecommendationEngine
+from recipe_service import RecipeService
 
 # Load environment variables
 load_dotenv()
@@ -51,7 +56,8 @@ app.add_middleware(
 )
 
 # Initialize recommendation engine
-recommendation_engine = RecommendationEngine(DatabaseManager())
+db_manager = DatabaseManager()
+recommendation_engine = RecommendationEngine(db_manager)
 
 # Initialize Elasticsearch service
 try:
@@ -61,10 +67,18 @@ except Exception as e:
     logger.error(f"Failed to initialize Elasticsearch service: {e}")
     es_service = None
 
+# Initialize Recipe service
+try:
+    recipe_service = RecipeService(db_manager, es_service, recommendation_engine)
+    logger.info("Recipe service initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Recipe service: {e}")
+    recipe_service = None
+
 
 # Database dependency
 def get_db():
-    return DatabaseManager()
+    return db_manager
 
 
 # Elasticsearch dependency
@@ -74,6 +88,13 @@ def get_es_service():
             status_code=503, detail="Elasticsearch service is not available"
         )
     return es_service
+
+
+# Recipe service dependency
+def get_recipe_service():
+    if recipe_service is None:
+        raise HTTPException(status_code=503, detail="Recipe service is not available")
+    return recipe_service
 
 
 @app.get("/")
@@ -460,6 +481,55 @@ async def delete_user(user_id: str, db: DatabaseManager = Depends(get_db)):
             status_code=404, detail="User not found or could not be deleted"
         )
     return {"message": "User deleted successfully", "user_id": user_id}
+
+
+@app.post("/recipes", response_model=RecipeBatchCreateResponse)
+async def create_recipes(
+    recipes_data: List[RecipeCreateRequest],
+    recipe_svc: RecipeService = Depends(get_recipe_service),
+):
+    """Create multiple recipes with automatic feature vector calculation"""
+    start_time = time.time()
+    recipe_dicts = [recipe.dict() for recipe in recipes_data]
+    recipe_ids = recipe_svc.add_recipe(recipe_dicts)
+    end_time = time.time()
+
+    # Randomly select one of the added recipes for similarity analysis
+    sample_recipe_id = None
+    sample_recipe_title = None
+    similar_recipe_id = None
+    similar_recipe_title = None
+    similarity_score = None
+
+    if recipe_ids:
+        # Randomly select one of the successfully added recipes
+        sample_recipe_id = random.choice(recipe_ids)
+
+        # Get the recipe details
+        sample_recipe = recipe_svc.get_recipe(sample_recipe_id)
+        if sample_recipe:
+            sample_recipe_title = sample_recipe.title
+
+            # Find the most similar recipe (excluding itself)
+            similar_recipe_info = recipe_svc.get_most_similar_recipe(sample_recipe_id)
+            if similar_recipe_info and similar_recipe_info.get("similar_recipe"):
+                similar_recipe = similar_recipe_info["similar_recipe"]
+                similar_recipe_id = similar_recipe.id
+                similar_recipe_title = similar_recipe.title
+                similarity_score = similar_recipe_info.get("similarity_score")
+
+    return RecipeBatchCreateResponse(
+        message=f"Successfully processed {len(recipes_data)} recipes",
+        added_count=len(recipe_ids),
+        skipped_count=len(recipes_data) - len(recipe_ids),
+        recipe_ids=recipe_ids,
+        sample_recipe_id=sample_recipe_id,
+        sample_recipe_title=sample_recipe_title,
+        similar_recipe_id=similar_recipe_id,
+        similar_recipe_title=similar_recipe_title,
+        similarity_score=similarity_score,
+        total_time_seconds=round(end_time - start_time, 2),
+    )
 
 
 if __name__ == "__main__":
