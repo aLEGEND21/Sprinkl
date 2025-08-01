@@ -7,4 +7,3 @@ numpy
 scikit-learn
 python-multipart
 elasticsearch==9.0.2
-psutil

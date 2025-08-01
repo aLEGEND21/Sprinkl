@@ -9,7 +9,7 @@ USE foodapp;
 -- 1. Recipes Table
 -- Stores all the recipe information from the JSON dataset.
 -- 'id' will be a unique identifier for each recipe.
--- JSON types are used for 'ingredients', 'instructions', 'keywords', and 'feature_vector' to store
+-- JSON types are used for 'ingredients', 'instructions', and 'keywords' to store
 -- structured array data that will be processed by the ML backend.
 CREATE TABLE IF NOT EXISTS recipes (
     id VARCHAR(255) PRIMARY KEY,
@@ -25,8 +25,7 @@ CREATE TABLE IF NOT EXISTS recipes (
     keywords JSON, -- Stores an array of keywords/tags
     dietary_restrictions JSON, -- Stores dietary restrictions if any
     total_time INT, -- Total time in minutes
-    overall_rating DECIMAL(3,2), -- Rating from 0.0 to 5.0
-    feature_vector JSON -- Stores the numerical vector representation of the recipe for ML
+    overall_rating DECIMAL(3,2) -- Rating from 0.0 to 5.0
 );
 
 -- 2. Users Table

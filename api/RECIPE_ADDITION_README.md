@@ -42,20 +42,14 @@ Before adding new recipes, ensure:
 
 3. **Dependencies are installed**: All required packages are already in `requirements.txt`
 
-4. **Docker Volume Setup**: The `ml_models` directory is shared between containers:
    - **Development**: Use `docker-compose up` to start all services
    - **Production**: Use `docker-compose -f compose.prod.yml up` to start production services
-   - The `ml_models` volume ensures both API and db_init containers can access the same ML models
 
 ## Docker Setup
 
 The application uses Docker volumes to share ML models between containers:
 
 ### Volume Configuration
-
-- **`ml_models`**: Shared volume for ML models between API and db_init containers
-- **Path**: `/app/ml_models` within containers
-- **Purpose**: Allows both containers to read/write ML models (vectorizers, encoders)
 
 ### Development Setup
 
@@ -83,11 +77,7 @@ docker-compose -f compose.prod.yml up mariadb elasticsearch api
 # List volumes
 docker volume ls
 
-# Inspect ml_models volume
-docker volume inspect foodapp_ml_models
 
-# Remove volume (if needed)
-docker volume rm foodapp_ml_models
 ```
 
 ## API Endpoints

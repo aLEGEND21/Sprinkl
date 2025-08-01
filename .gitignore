@@ -11,6 +11,3 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
-# Recipe data
-ml_models/

@@ -6,13 +6,9 @@ import json
 import os
 import sys
 
-import joblib  # To save/load scikit-learn models
-import numpy as np
 import pymysql
 from dotenv import load_dotenv
 from elasticsearch import Elasticsearch
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.preprocessing import OneHotEncoder
 
 # --- Configuration ---
 # Load the database information from .env
@@ -30,10 +26,6 @@ ES_INDEX = "recipes"
 
 # Path to your JSON file
 JSON_FILE_PATH = "init_dataset.json"
-
-# Directory to save fitted ML models (vectorizers, encoders)
-ML_MODELS_DIR = "/app/ml_models"  # Path within the container
-os.makedirs(ML_MODELS_DIR, exist_ok=True)  # Create directory if it doesn't exist
 
 
 # --- Helper Functions ---
@@ -84,14 +76,13 @@ if __name__ == "__main__":
         print(f"Error checking recipes table: {e}")
         sys.exit(1)
 
-    all_recipes_raw_data = []  # To store all data for fitting vectorizers/encoders
-
-    # First pass: Read all data to fit the vectorizers/encoders
-    print(f"Reading JSON file: {JSON_FILE_PATH} for ML model training...")
+    # Read all recipes from JSON file
+    print(f"Reading JSON file: {JSON_FILE_PATH}...")
     try:
         with open(JSON_FILE_PATH, "r", encoding="utf-8") as jsonfile:
             recipes_data = json.load(jsonfile)
             # Convert the dictionary to a list of recipes with their URLs as keys
+            all_recipes_raw_data = []
             for url, recipe in recipes_data.items():
                 # The recipe is already formatted for database insertion
                 all_recipes_raw_data.append(recipe)
@@ -100,63 +91,8 @@ if __name__ == "__main__":
         print(f"Error: JSON file not found at {JSON_FILE_PATH}")
         exit()
     except Exception as e:
-        print(f"Error reading JSON for ML model training: {e}")
+        print(f"Error reading JSON: {e}")
         exit()
-
-    # Prepare data for TF-IDF and One-Hot Encoding
-    recipe_titles = [
-        safe_string(row.get("title", "")).strip() for row in all_recipes_raw_data
-    ]
-    ingredients_text = [
-        " ".join(row.get("ingredients", [])).strip() for row in all_recipes_raw_data
-    ]
-    instructions_text = [
-        " ".join(row.get("instructions", [])).strip() for row in all_recipes_raw_data
-    ]
-    cuisines = [
-        safe_string(row.get("cuisine", "")).strip() for row in all_recipes_raw_data
-    ]
-    descriptions = [
-        safe_string(row.get("description", "")).strip() for row in all_recipes_raw_data
-    ]
-
-    # --- Initialize and Fit ML Models ---
-    print("Fitting TF-IDF Vectorizers and One-Hot Encoders...")
-
-    # TF-IDF for Recipe Title
-    title_vectorizer = TfidfVectorizer(
-        stop_words="english", max_features=1000
-    )  # Limit features to avoid very high dimensionality
-    title_vectorizer.fit(recipe_titles)
-    title_path = os.path.join(ML_MODELS_DIR, "title_vectorizer.joblib")
-    joblib.dump(title_vectorizer, title_path)
-
-    # TF-IDF for Ingredients
-    ingredients_vectorizer = TfidfVectorizer(stop_words="english", max_features=2000)
-    ingredients_vectorizer.fit(ingredients_text)
-    ingredients_path = os.path.join(ML_MODELS_DIR, "ingredients_vectorizer.joblib")
-    joblib.dump(ingredients_vectorizer, ingredients_path)
-
-    # TF-IDF for Instructions
-    instructions_vectorizer = TfidfVectorizer(stop_words="english", max_features=3000)
-    instructions_vectorizer.fit(instructions_text)
-    instructions_path = os.path.join(ML_MODELS_DIR, "instructions_vectorizer.joblib")
-    joblib.dump(instructions_vectorizer, instructions_path)
-
-    # TF-IDF for Description
-    description_vectorizer = TfidfVectorizer(stop_words="english", max_features=1000)
-    description_vectorizer.fit(descriptions)
-    description_path = os.path.join(ML_MODELS_DIR, "description_vectorizer.joblib")
-    joblib.dump(description_vectorizer, description_path)
-
-    # One-Hot Encoder for Cuisine
-    # Reshape to 2D array as required by OneHotEncoder
-    cuisine_encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
-    cuisine_encoder.fit(np.array(cuisines).reshape(-1, 1))
-    cuisine_path = os.path.join(ML_MODELS_DIR, "cuisine_encoder.joblib")
-    joblib.dump(cuisine_encoder, cuisine_path)
-
-    print("ML Models fitted and saved successfully.")
 
     # --- Connect to DB and Insert Data ---
     conn = None
@@ -174,8 +110,7 @@ if __name__ == "__main__":
         print(f"Connected to MariaDB database: {DB_NAME}")
 
         inserted_count = 0
-        recipe_ids = {}  # Store recipe IDs to use in Elasticsearch
-        for i, recipe in enumerate(all_recipes_raw_data):
+        for recipe in all_recipes_raw_data:
             try:
                 # Use the pre-generated UUID from the formatted recipe
                 recipe_id = recipe["id"]
@@ -191,79 +126,32 @@ if __name__ == "__main__":
                     )
                     continue
 
-                recipe_ids[i] = recipe_id  # Store the ID for Elasticsearch
-
-                # --- Generate Feature Vector for Current Recipe ---
-                # Transform text features
-                title_vec = title_vectorizer.transform(
-                    [safe_string(recipe.get("title", "")).strip()]
-                ).toarray()
-                ingredients_vec = ingredients_vectorizer.transform(
-                    [" ".join(recipe.get("ingredients", [])).strip()]
-                ).toarray()
-                instructions_vec = instructions_vectorizer.transform(
-                    [
-                        " ".join(recipe.get("instructions", [])).strip()
-                    ]  # Note: field name changed
-                ).toarray()
-                description_vec = description_vectorizer.transform(
-                    [safe_string(recipe.get("description", "")).strip()]
-                ).toarray()
-
-                # Transform categorical features
-                cuisine_vec = cuisine_encoder.transform(
-                    np.array([safe_string(recipe.get("cuisine", "")).strip()]).reshape(
-                        -1, 1
-                    )
-                )
-
-                # Concatenate all vectors to form the final feature vector
-                # Ensure all vectors are 2D arrays before concatenation, then flatten to 1D
-                combined_feature_vector = np.concatenate(
-                    [
-                        title_vec.flatten(),
-                        ingredients_vec.flatten(),
-                        instructions_vec.flatten(),
-                        description_vec.flatten(),
-                        cuisine_vec.flatten(),
-                    ]
-                ).tolist()  # Convert to list for JSON serialization
-
-                # Use the pre-formatted recipe data and add the feature vector
-                recipe_data = recipe.copy()
-                recipe_data["feature_vector"] = json.dumps(combined_feature_vector)
-
                 # Insert the data into the database
                 cursor.execute(
                     """
                     INSERT INTO recipes (
                         id, title, description, recipe_url, image_url, ingredients, instructions,
                         category, cuisine, site_name, keywords, dietary_restrictions,
-                        total_time, overall_rating, feature_vector
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        total_time, overall_rating
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                     (
-                        recipe_data["id"],
-                        recipe_data["title"],
-                        recipe_data["description"],
-                        recipe_data["recipe_url"],
-                        recipe_data["image_url"],
+                        recipe["id"],
+                        recipe["title"],
+                        recipe["description"],
+                        recipe["recipe_url"],
+                        recipe["image_url"],
+                        json.dumps(recipe["ingredients"]),  # Serialize list to JSON
+                        json.dumps(recipe["instructions"]),  # Serialize list to JSON
+                        recipe["category"],
+                        recipe["cuisine"],
+                        recipe["site_name"],
+                        json.dumps(recipe["keywords"]),  # Serialize list to JSON
                         json.dumps(
-                            recipe_data["ingredients"]
+                            recipe["dietary_restrictions"]
                         ),  # Serialize list to JSON
-                        json.dumps(
-                            recipe_data["instructions"]
-                        ),  # Serialize list to JSON
-                        recipe_data["category"],
-                        recipe_data["cuisine"],
-                        recipe_data["site_name"],
-                        json.dumps(recipe_data["keywords"]),  # Serialize list to JSON
-                        json.dumps(
-                            recipe_data["dietary_restrictions"]
-                        ),  # Serialize list to JSON
-                        recipe_data["total_time"],
-                        recipe_data["overall_rating"],
-                        recipe_data["feature_vector"],
+                        recipe["total_time"],
+                        recipe["overall_rating"],
                     ),
                 )
 
@@ -307,7 +195,7 @@ if __name__ == "__main__":
 
         # Create index if it doesn't exist
         if not es.indices.exists(index=ES_INDEX):
-            # Define the mapping for recipe titles
+            # Define the mapping for recipe search and more_like_this queries
             mapping = {
                 "mappings": {
                     "properties": {
@@ -315,10 +203,87 @@ if __name__ == "__main__":
                         "title": {
                             "type": "text",
                             "analyzer": "standard",
-                            "search_analyzer": "standard",
+                            "fields": {
+                                "keyword": {"type": "keyword"},
+                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"},
+                            },
                         },
+                        "description": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "fields": {
+                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"}
+                            },
+                        },
+                        "recipe_url": {"type": "keyword"},
+                        "image_url": {"type": "keyword"},
+                        "ingredients": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "fields": {
+                                "keyword": {"type": "keyword"},
+                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"},
+                            },
+                        },
+                        "instructions": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "fields": {
+                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"}
+                            },
+                        },
+                        "category": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "fields": {"keyword": {"type": "keyword"}},
+                        },
+                        "cuisine": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "fields": {"keyword": {"type": "keyword"}},
+                        },
+                        "site_name": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "fields": {"keyword": {"type": "keyword"}},
+                        },
+                        "keywords": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "fields": {
+                                "keyword": {"type": "keyword"},
+                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"},
+                            },
+                        },
+                        "dietary_restrictions": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "fields": {"keyword": {"type": "keyword"}},
+                        },
+                        "total_time": {"type": "integer"},
+                        "overall_rating": {"type": "float"},
                     }
-                }
+                },
+                "settings": {
+                    "analysis": {
+                        "analyzer": {
+                            "ngram_analyzer": {
+                                "type": "custom",
+                                "tokenizer": "standard",
+                                "filter": ["lowercase", "ngram_filter"],
+                            }
+                        },
+                        "filter": {
+                            "ngram_filter": {
+                                "type": "ngram",
+                                "min_gram": 2,
+                                "max_gram": 3,
+                            }
+                        },
+                    },
+                    "number_of_shards": 1,
+                    "number_of_replicas": 0,
+                },
             }
 
             es.indices.create(index=ES_INDEX, body=mapping)
@@ -328,16 +293,36 @@ if __name__ == "__main__":
 
         # Index recipes in Elasticsearch
         indexed_count = 0
-        for i, recipe in enumerate(all_recipes_raw_data):
+        for recipe in all_recipes_raw_data:
             try:
-                # Create document for Elasticsearch (only title and id)
+                # Create document for Elasticsearch
                 doc = {
-                    "id": recipe_ids[i],  # Use the same ID as MariaDB
+                    "id": recipe["id"],
                     "title": safe_string(recipe.get("title", "")).strip(),
+                    "description": safe_string(recipe.get("description", "")).strip(),
+                    "recipe_url": safe_string(recipe.get("recipe_url", "")).strip(),
+                    "image_url": safe_string(recipe.get("image_url", "")).strip(),
+                    "ingredients": recipe.get(
+                        "ingredients", []
+                    ),  # Keep as array for better MLT
+                    "instructions": recipe.get(
+                        "instructions", []
+                    ),  # Keep as array for better MLT
+                    "category": safe_string(recipe.get("category", "")).strip(),
+                    "cuisine": safe_string(recipe.get("cuisine", "")).strip(),
+                    "site_name": safe_string(recipe.get("site_name", "")).strip(),
+                    "keywords": recipe.get(
+                        "keywords", []
+                    ),  # Keep as array for better MLT
+                    "dietary_restrictions": recipe.get(
+                        "dietary_restrictions", []
+                    ),  # Keep as array for better MLT
+                    "total_time": safe_int(recipe.get("total_time")),
+                    "overall_rating": safe_float(recipe.get("overall_rating")),
                 }
 
-                # Index the document
-                es.index(index=ES_INDEX, body=doc)
+                # Index the document using the recipe ID as the document ID
+                es.index(index=ES_INDEX, id=recipe["id"], body=doc)
                 indexed_count += 1
 
                 if indexed_count % 100 == 0:
@@ -365,6 +350,93 @@ if __name__ == "__main__":
             print("First 5 results:")
             for hit in test_response["hits"]["hits"][:5]:
                 print(f"  - {hit['_source']['title']}")
+
+        # Test more_like_this functionality
+        print("\nTesting more_like_this functionality...")
+
+        # Recipe IDs for various alcoholic beverages to use as reference
+        test_recipe_ids = [
+            "9de17a77-ac3b-44ee-9867-3653fbe398b1",
+            "dad7e78b-f2db-43fc-8e2a-b590ec3ed79b",
+            "ed536e65-8e1e-4585-ab9e-9325cc03cce0",
+        ]
+
+        # Create like clauses for the more_like_this query
+        like_clauses = []
+        exclude_ids = []
+
+        for recipe_id in test_recipe_ids:
+            like_clauses.append({"_index": ES_INDEX, "_id": recipe_id})
+            exclude_ids.append(recipe_id)
+
+        # Create the single more_like_this query with all test recipes
+        query = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "more_like_this": {
+                                "fields": [
+                                    "title^2",  # Recipe title (weighted 2x)
+                                    "ingredients",  # Recipe ingredients
+                                    "keywords",  # Recipe keywords
+                                    "category",  # Recipe category
+                                    "cuisine",  # Cuisine type
+                                ],
+                                "like": like_clauses,
+                                "min_term_freq": 1,
+                                "max_query_terms": 12,
+                                "min_doc_freq": 1,
+                            }
+                        }
+                    ],
+                    "must_not": [{"terms": {"id": exclude_ids}}],
+                }
+            },
+            "size": 10,
+            "_source": [
+                "id",
+                "title",
+                "description",
+                "recipe_url",
+                "image_url",
+                "ingredients",
+                "instructions",
+                "category",
+                "cuisine",
+                "site_name",
+                "keywords",
+                "dietary_restrictions",
+                "total_time",
+                "overall_rating",
+            ],
+        }
+
+        try:
+            more_like_response = es.search(index=ES_INDEX, body=query)
+
+            print(
+                f"more_like_this query returned {len(more_like_response['hits']['hits'])} results"
+            )
+            if more_like_response["hits"]["hits"]:
+                print("Top similar recipes:")
+                # Get the maximum score for normalization
+                max_score = more_like_response["hits"]["hits"][0]["_score"]
+
+                for i, hit in enumerate(more_like_response["hits"]["hits"][:10], 1):
+                    source = hit["_source"]
+                    # Normalize score to 0-1 range
+                    normalized_score = hit["_score"] / max_score if max_score > 0 else 0
+                    print(
+                        f"  {i}. {source['title']} (Score: {hit['_score']:.2f}, Normalized: {normalized_score:.3f})"
+                    )
+                    print(f"     Category: {source.get('category', 'N/A')}")
+                    print(f"     Cuisine: {source.get('cuisine', 'N/A')}")
+            else:
+                print("No similar recipes found")
+
+        except Exception as e:
+            print(f"Error testing more_like_this query: {e}")
 
     except Exception as e:
         print(f"Elasticsearch error: {e}")

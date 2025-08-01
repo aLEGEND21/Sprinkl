@@ -1,13 +1,10 @@
 # main.py - FastAPI application for recipe recommendations
 import logging
 import random
-import sys
 import time
-import tracemalloc
 from datetime import datetime
 from typing import List, Optional
 
-import psutil
 from database import DatabaseManager
 from dotenv import load_dotenv
 from es_service import ElasticsearchService
@@ -25,7 +22,6 @@ from models import (
     UserLoginResponse,
     UserStatsResponse,
 )
-from rec_engine import RecommendationEngine
 from recipe_service import RecipeService
 
 # Load environment variables
@@ -34,9 +30,6 @@ load_dotenv()
 # Configure logging
 setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
-
-# Start memory tracking
-tracemalloc.start()
 
 
 # Initialize FastAPI app
@@ -55,13 +48,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize recommendation engine
+# Initialize database manager
 db_manager = DatabaseManager()
-recommendation_engine = RecommendationEngine(db_manager)
 
 # Initialize Elasticsearch service
 try:
-    es_service = ElasticsearchService()
+    es_service = ElasticsearchService(db_manager)
     logger.info("Elasticsearch service initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize Elasticsearch service: {e}")
@@ -69,7 +61,7 @@ except Exception as e:
 
 # Initialize Recipe service
 try:
-    recipe_service = RecipeService(db_manager, es_service, recommendation_engine)
+    recipe_service = RecipeService(db_manager, es_service)
     logger.info("Recipe service initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize Recipe service: {e}")
@@ -101,54 +93,6 @@ def get_recipe_service():
 async def root():
     """Health check endpoint"""
     return {"message": "Food Recommendation API is running!", "status": "healthy"}
-
-
-@app.get("/memory")
-async def get_memory_usage():
-    """Get detailed memory usage information"""
-    # Get process memory info
-    process = psutil.Process()
-    memory_info = process.memory_info()
-
-    # Get tracemalloc statistics
-    current, peak = tracemalloc.get_traced_memory()
-
-    # Calculate memory usage of key objects
-    def get_object_size(obj):
-        return round(sys.getsizeof(obj) / (1024 * 1024), 2)  # Convert to MB
-
-    memory_breakdown = {
-        "process_rss": round(
-            memory_info.rss / (1024 * 1024), 2
-        ),  # Resident Set Size in MB
-        "process_vms": round(
-            memory_info.vms / (1024 * 1024), 2
-        ),  # Virtual Memory Size in MB
-        "tracemalloc_current": round(
-            current / (1024 * 1024), 2
-        ),  # Current traced memory in MB
-        "tracemalloc_peak": round(peak / (1024 * 1024), 2),  # Peak traced memory in MB
-        "recommendation_engine": {
-            "id_vec_map": get_object_size(recommendation_engine.id_vec_map),
-            "id_title_map": get_object_size(recommendation_engine.id_title_map),
-            "recipe_ids": get_object_size(recommendation_engine.recipe_ids),
-            "feature_matrix": get_object_size(recommendation_engine.feature_matrix),
-        },
-    }
-
-    return {
-        "memory_usage_mb": memory_breakdown,
-        "system_info": {
-            "python_version": sys.version,
-            "platform": sys.platform,
-        },
-        "recommendation_engine_info": {
-            "num_recipes": len(recommendation_engine.recipe_ids),
-            "feature_matrix_shape": recommendation_engine.feature_matrix.shape
-            if recommendation_engine.feature_matrix is not None
-            else None,
-        },
-    }
 
 
 @app.get("/reset")
@@ -251,7 +195,10 @@ async def user_login(
 
 @app.post("/users/{user_id}/feedback", response_model=UserFeedbackResponse)
 async def submit_feedback(
-    user_id: str, feedback: UserFeedbackRequest, db: DatabaseManager = Depends(get_db)
+    user_id: str,
+    feedback: UserFeedbackRequest,
+    db: DatabaseManager = Depends(get_db),
+    es_service: ElasticsearchService = Depends(get_es_service),
 ):
     """Submit user feedback (like/dislike) for a recipe"""
 
@@ -271,7 +218,7 @@ async def submit_feedback(
     # Get the next recommendation for the user
     user_feedback = db.get_feedback(user_id)
     prev_recs = db.get_recommendations(user_id)
-    rec_ids = recommendation_engine.generate_recommendations(
+    rec_ids = es_service.generate_recommendations(
         user_feedback, prev_recs, num_recommendations=1
     )
     rec_id = rec_ids[0]
@@ -292,18 +239,22 @@ async def get_recommendations(
     user_id: str,
     num_recommendations: Optional[int] = 10,
     db: DatabaseManager = Depends(get_db),
+    es: ElasticsearchService = Depends(get_es_service),
 ):
-    """Get personalized recipe recommendations for a user"""
+    """Get personalized recipe recommendations for a user using Elasticsearch feature vector similarity"""
     # Load the saved recommendations from the database
     rec_ids = db.get_recommendations(user_id)
 
-    # If no saved recommendations, generate new ones
+    # If no saved recommendations, generate new ones using Elasticsearch
     if not rec_ids:
         user_feedback = db.get_feedback(user_id)
         prev_recs = []
-        rec_ids = recommendation_engine.generate_recommendations(
+
+        # Use Elasticsearch service for recommendations
+        rec_ids = es.generate_recommendations(
             user_feedback, prev_recs, num_recommendations=num_recommendations
         )
+
         db.save_recommendations(user_id, rec_ids)
 
     # Load the full recipe data in bulk
@@ -337,7 +288,8 @@ async def search_recipes(
     es: ElasticsearchService = Depends(get_es_service),
 ):
     """Search recipes by title using GET request (easier for testing)"""
-    print(f"Searching for recipes with query: {q}")
+    logger.info(f"Searching for recipes with query: {q}")
+
     # Validate pagination parameters
     if page < 1:
         raise HTTPException(status_code=400, detail="Page must be greater than 0")

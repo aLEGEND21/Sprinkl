@@ -226,22 +226,6 @@ class DatabaseManager:
 
                 return recipe_ids
 
-    def get_all_feature_vectors(self) -> Dict[str, float]:
-        """Get all feature vectors from the database"""
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT id, feature_vector FROM recipes")
-                res = cursor.fetchall()
-
-                # Convert feature vectors from [{"id": id, "feature_vector": feature_vector}] to {id: feature_vector}
-                id_vec_map = {}
-                for dict_ in res:
-                    id_ = dict_["id"]
-                    vec = dict_["feature_vector"]
-                    id_vec_map[id_] = vec
-
-                return id_vec_map
-
     def get_all_recipe_titles(self) -> Dict[str, str]:
         """Get all recipe titles from the database. This is used for logging/debug purposes"""
         with self.get_connection() as conn:
@@ -270,9 +254,9 @@ class DatabaseManager:
                             INSERT INTO recipes (
                                 id, title, description, recipe_url, image_url, ingredients, instructions,
                                 category, cuisine, site_name, keywords, dietary_restrictions,
-                                total_time, overall_rating, feature_vector
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
+                                total_time, overall_rating
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """,
                             (
                                 recipe_data["id"],
                                 recipe_data["title"],
@@ -288,7 +272,6 @@ class DatabaseManager:
                                 recipe_data["dietary_restrictions"],
                                 recipe_data["total_time"],
                                 recipe_data["overall_rating"],
-                                recipe_data["feature_vector"],
                             ),
                         )
                         recipe_ids.append(recipe_data["id"])

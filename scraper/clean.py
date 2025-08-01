@@ -224,7 +224,6 @@ def format_recipe(recipe, url):
         "dietary_restrictions": [],  # Not present in current data
         "total_time": safe_int(recipe.get("total_time")),
         "overall_rating": safe_float(recipe.get("ratings")),
-        "feature_vector": None,  # Will be calculated during ML model training
     }
 
     return recipe_data

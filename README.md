@@ -39,7 +39,6 @@ A modern, full-stack web application for discovering, searching, and saving reci
 
 - Recipes, users, feedback, saved recipes, and recommendations stored in MariaDB
 - Initial schema and data via `db_init/init.sql` and `db_init/init_dataset.json`
-- ML models and vectorizers stored in `ml_models/`
 
 **DevOps**
 
@@ -95,12 +94,6 @@ docker-compose up --build
 - MariaDB: localhost:3306
 - Elasticsearch: localhost:9200
 
-**Note**: The application uses a shared Docker volume (`ml_models`) to store ML models between the API and database initialization containers. This ensures that:
-
-- The `db_init` container can save trained ML models
-- The `api` container can load and use these models for recipe recommendations
-- Models persist across container restarts
-
 ### 4. Local Development (Hot Reload)
 
 #### Frontend
@@ -137,7 +130,7 @@ docker-compose exec mariadb mysql -u root -p foodapp_db < db_init/init.sql
 1. **Frontend**: Edit React/TypeScript code in `frontend/app/` and components in `frontend/components/`.
 2. **Backend**: Edit FastAPI code in `api/` (models, endpoints, ML logic).
 3. **Database**: Update schema in `db_init/init.sql` and data in `db_init/init_dataset.json`.
-4. **ML/Recommendation Logic**: Update or retrain models in `ml_models/` and scripts in `db_init/`.
+4. **Recommendation Logic**: Update scripts in `db_init/` for data processing and initialization.
 5. **Testing**: Use the FastAPI docs at `/docs` for API testing. Frontend can be tested with browser/devtools.
 6. **Hot Reload**: Both frontend and backend support hot reload in dev mode.
 7. **Contributions**: Fork, branch, PR. Test thoroughly before submitting.
@@ -208,7 +201,7 @@ FoodApp/
 ├── frontend/      # Next.js frontend (React, TypeScript, Tailwind)
 ├── api/           # FastAPI backend (Python, ML, DB)
 ├── db_init/       # DB schema, initial data, ML scripts
-├── ml_models/     # Saved ML models/vectorizers
+
 ├── docker-compose.yml
 └── README.md
 ```
