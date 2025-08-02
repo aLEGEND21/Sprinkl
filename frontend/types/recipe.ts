@@ -1,4 +1,4 @@
-// types/recipe.ts - Recipe type definitions for the FoodApp frontend
+// types/recipe.ts - Recipe type definitions for the Sprinkl frontend
 
 export interface Recipe {
   id: string;

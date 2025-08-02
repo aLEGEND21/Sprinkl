@@ -1,10 +1,10 @@
 -- init.sql
 -- This script will be executed by Docker Compose when the MariaDB container starts for the first time.
--- It sets up the database schema for the AI-powered food app.
+-- It sets up the database schema for the AI-powered Sprinkl app.
 
 -- Create the main database
-CREATE DATABASE IF NOT EXISTS foodapp;
-USE foodapp;
+CREATE DATABASE IF NOT EXISTS sprinkl;
+USE sprinkl;
 
 -- 1. Recipes Table
 -- Stores all the recipe information from the JSON dataset.

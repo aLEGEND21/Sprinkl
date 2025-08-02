@@ -1,6 +1,6 @@
 # Recipe Addition Guide
 
-This guide explains how to add new recipes to your FoodApp database while automatically calculating feature vectors for the recommendation system.
+This guide explains how to add new recipes to your Sprinkl database while automatically calculating feature vectors for the recommendation system.
 
 ## Overview
 

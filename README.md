@@ -1,4 +1,4 @@
-# FoodApp - Tinder for Recipes
+# Sprinkl - Tinder for Recipes
 
 A modern, full-stack web application for discovering, searching, and saving recipes, powered by AI-driven personalized recommendations and Google OAuth authentication.
 
@@ -59,7 +59,7 @@ A modern, full-stack web application for discovering, searching, and saving reci
 
 ```bash
 git clone <repository-url>
-cd FoodApp
+cd Sprinkl
 ```
 
 ### 2. Configure Environment Variables
@@ -72,11 +72,9 @@ cp .env.example .env
 **Required variables:**
 
 ```
-MARIADB_HOST=localhost
-MARIADB_PORT=3306
-MARIADB_USER=root
+MARIADB_USER=sprinkl_user
 MARIADB_PASSWORD=your_password
-MARIADB_DATABASE=foodapp_db
+MARIADB_DATABASE=sprinkl
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 BACKEND_API_URL=http://localhost:8000
@@ -120,7 +118,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - To manually re-run schema:
 
 ```bash
-docker-compose exec mariadb mysql -u root -p foodapp_db < db_init/init.sql
+docker-compose exec mariadb mysql -u sprinkl_user -p sprinkl < db_init/init.sql
 ```
 
 ---
@@ -197,7 +195,7 @@ docker-compose exec mariadb mysql -u root -p foodapp_db < db_init/init.sql
 ## 📁 Project Structure
 
 ```
-FoodApp/
+Sprinkl/
 ├── frontend/      # Next.js frontend (React, TypeScript, Tailwind)
 ├── api/           # FastAPI backend (Python, ML, DB)
 ├── db_init/       # DB schema, initial data, ML scripts
@@ -215,7 +213,7 @@ FoodApp/
 
 ## 📄 License
 
-MIT License. See LICENSE file.
+This repository is not meant for reuse without permission of the owner, aLEGEND21.
 
 ---
 

@@ -1,7 +1,7 @@
 services:
   mariadb:
     image: mariadb:latest
-    container_name: foodapp.db
+    container_name: sprinkl.db
     restart: always
     env_file: .env
     volumes:
@@ -17,7 +17,7 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2 # Same as Python lib version
-    container_name: foodapp.elasticsearch
+    container_name: sprinkl.elasticsearch
     restart: always
     environment:
       - discovery.type=single-node # Set to single-node setup
@@ -37,7 +37,7 @@ services:
 
   api:
     build: ./api
-    container_name: foodapp.api
+    container_name: sprinkl.api
     restart: always
     env_file: .env
     ports:
@@ -59,7 +59,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: development # Use 'development' for dev, 'production' for prod
-    container_name: foodapp.frontend
+    container_name: sprinkl.frontend
     restart: always
     env_file: .env
     ports:
@@ -75,7 +75,7 @@ services:
 
   init:
     build: ./db_init
-    container_name: foodapp.init
+    container_name: sprinkl.init
     env_file: .env
     depends_on:
       mariadb:

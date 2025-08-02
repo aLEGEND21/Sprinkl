@@ -55,9 +55,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <ChefHat className="h-8 w-8 text-orange-500" />
-              <span className="text-foreground text-xl font-bold">
-                Food App
-              </span>
+              <span className="text-foreground text-xl font-bold">Sprinkl</span>
             </div>
             <div className="flex items-center space-x-3">
               <Button
@@ -91,7 +89,7 @@ export default function LandingPage() {
             <div className="space-y-6 text-center lg:space-y-8 lg:text-left">
               <div className="space-y-4">
                 <h1 className="text-foreground text-4xl leading-tight font-bold lg:text-6xl">
-                  Food App
+                  Sprinkl
                 </h1>
                 <p className="text-muted-foreground text-xl font-semibold lg:text-2xl">
                   The only recipe app you'll ever need
@@ -301,10 +299,10 @@ export default function LandingPage() {
         <div className="container mx-auto text-center">
           <div className="mb-4 flex items-center justify-center space-x-2">
             <ChefHat className="h-6 w-6 text-orange-500" />
-            <span className="text-foreground text-lg font-bold">Food App</span>
+            <span className="text-foreground text-lg font-bold">Sprinkl</span>
           </div>
           <p className="text-muted-foreground text-sm">
-            © {new Date().getFullYear()} Food App. Made with ❤️ by{" "}
+            © {new Date().getFullYear()} Sprinkl. Made with ❤️ by{" "}
             <Link
               href="https://github.com/aLEGEND21/"
               className="text-orange-500"

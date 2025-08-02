@@ -10,8 +10,8 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Food App Web Demo",
-  description: "This is a web demo for the Food App",
+  title: "Sprinkl Web Demo",
+  description: "This is a web demo for the Sprinkl app",
 };
 
 export default function RootLayout({
