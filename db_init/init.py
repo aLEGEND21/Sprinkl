@@ -1,6 +1,7 @@
 # init.py - Add the recipes from the .json file to the database and configure Elasticsearch
-# This file is not automatically run when the container is started, unlike init.sql
-# Instead, run this script manually after the container is started from the db_init directory
+# MariaDB doesn't run this script automatically when the container is started, unlike init.sql
+# Instead, we have a separate container called init that runs this script when it is built, and the other containers
+# wait for it to finish before starting.
 
 import json
 import os
