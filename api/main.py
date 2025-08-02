@@ -439,6 +439,7 @@ async def delete_user(user_id: str, db: DatabaseManager = Depends(get_db)):
 async def create_recipes(
     recipes_data: List[RecipeCreateRequest],
     recipe_svc: RecipeService = Depends(get_recipe_service),
+    db: DatabaseManager = Depends(get_db),
 ):
     """
     Create multiple recipes with automatic feature vector calculation and Elasticsearch indexing.
@@ -469,7 +470,7 @@ async def create_recipes(
         sample_recipe_id = random.choice(recipe_ids)
 
         # Get the recipe details
-        sample_recipe = recipe_svc.get_recipe(sample_recipe_id)
+        sample_recipe = db.get_recipe(sample_recipe_id)
         if sample_recipe:
             sample_recipe_title = sample_recipe.title
 

@@ -108,141 +108,84 @@ class ElasticsearchService:
             logger.error(f"Error generating feature vector: {e}")
             return None
 
-    def index_recipe(
-        self, recipe_id: str, title: str, recipe_data: Dict = None
-    ) -> bool:
+    def bulk_index_recipes(self, recipes_data: List[Dict]) -> List[str]:
         """
-        Index a recipe in Elasticsearch for search functionality with feature vector
+        Bulk index multiple recipes in Elasticsearch with feature vectors
 
         Args:
-            recipe_id: Unique identifier for the recipe
-            title: Recipe title for search indexing
-            recipe_data: Full recipe data for feature vector generation
+            recipes_data: List of recipe dictionaries to index
 
         Returns:
-            bool: True if indexing was successful, False otherwise
+            List[str]: List of successfully indexed recipe IDs
         """
+        if not recipes_data:
+            return []
+
         try:
-            # Create document for Elasticsearch
-            doc = {
-                "id": recipe_id,
-                "title": title,
-            }
+            # Prepare bulk operations
+            bulk_operations = []
+            indexed_recipe_ids = []
 
-            # Add feature vector if recipe data is provided and models are loaded
-            if recipe_data and self.tfidf_vectorizer and self.pca:
-                feature_vector = self._generate_feature_vector(recipe_data)
-                if feature_vector is not None:
-                    doc["feature_vector"] = feature_vector.tolist()
-                    logger.info(f"Added feature vector to recipe {recipe_id}")
+            for recipe_data in recipes_data:
+                recipe_id = recipe_data.get("id")
+                title = recipe_data.get("title", "")
 
-            # Index the document
-            self.es.index(index=self.INDEX_NAME, body=doc)
+                if not recipe_id or not title:
+                    logger.warning(
+                        f"Skipping recipe with missing ID or title: {recipe_id}"
+                    )
+                    continue
 
-            # Refresh the index to make document searchable immediately
-            self.es.indices.refresh(index=self.INDEX_NAME)
-
-            logger.info(
-                f"Successfully indexed recipe in Elasticsearch with ID: {recipe_id}"
-            )
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to index recipe in Elasticsearch: {e}")
-            return False
-
-    def create_index_if_not_exists(self) -> bool:
-        """
-        Create the recipes index if it doesn't exist with feature vector support
-
-        Returns:
-            bool: True if index exists or was created successfully, False otherwise
-        """
-        try:
-            # Check if index exists
-            if not self.es.indices.exists(index=self.INDEX_NAME):
-                # Define the mapping for recipe search with feature vectors
-                mapping = {
-                    "mappings": {
-                        "properties": {
-                            "id": {"type": "keyword"},
-                            "title": {
-                                "type": "text",
-                                "analyzer": "standard",
-                                "fields": {
-                                    "keyword": {"type": "keyword"},
-                                },
-                            },
-                            "description": {
-                                "type": "text",
-                                "analyzer": "standard",
-                            },
-                            "recipe_url": {"type": "keyword"},
-                            "image_url": {"type": "keyword"},
-                            "ingredients": {
-                                "type": "text",
-                                "analyzer": "standard",
-                            },
-                            "instructions": {
-                                "type": "text",
-                                "analyzer": "standard",
-                            },
-                            "category": {
-                                "type": "text",
-                                "analyzer": "standard",
-                                "fields": {"keyword": {"type": "keyword"}},
-                            },
-                            "cuisine": {
-                                "type": "text",
-                                "analyzer": "standard",
-                                "fields": {"keyword": {"type": "keyword"}},
-                            },
-                            "site_name": {
-                                "type": "text",
-                                "analyzer": "standard",
-                                "fields": {"keyword": {"type": "keyword"}},
-                            },
-                            "keywords": {
-                                "type": "text",
-                                "analyzer": "standard",
-                            },
-                            "dietary_restrictions": {
-                                "type": "text",
-                                "analyzer": "standard",
-                                "fields": {"keyword": {"type": "keyword"}},
-                            },
-                            "total_time": {"type": "integer"},
-                            "overall_rating": {"type": "float"},
-                            "feature_vector": {
-                                "type": "dense_vector",
-                                "dims": 4000,  # Default dimension, will be updated if models are loaded
-                                "index": True,
-                                "similarity": "cosine",
-                            },
-                        }
-                    },
-                    "settings": {
-                        "number_of_shards": 1,
-                        "number_of_replicas": 0,
-                    },
+                # Create document for Elasticsearch
+                doc = {
+                    "id": recipe_id,
+                    "title": title,
                 }
 
-                # Update feature vector dimensions if models are loaded
-                if self.pca:
-                    mapping["mappings"]["properties"]["feature_vector"]["dims"] = (
-                        self.pca.n_components_
-                    )
+                # Add feature vector if models are loaded
+                if self.tfidf_vectorizer and self.pca:
+                    feature_vector = self._generate_feature_vector(recipe_data)
+                    if feature_vector is not None:
+                        doc["feature_vector"] = feature_vector.tolist()
+                        logger.debug(f"Generated feature vector for recipe {recipe_id}")
 
-                self.es.indices.create(index=self.INDEX_NAME, body=mapping)
-                logger.info(f"Created Elasticsearch index: {self.INDEX_NAME}")
-            else:
-                logger.info(f"Elasticsearch index {self.INDEX_NAME} already exists")
+                # Add bulk operation
+                bulk_operations.extend(
+                    [{"index": {"_index": self.INDEX_NAME, "_id": recipe_id}}, doc]
+                )
 
-            return True
+            if not bulk_operations:
+                logger.warning("No valid recipes to index")
+                return []
+
+            # Execute bulk indexing
+            if bulk_operations:
+                response = self.es.bulk(body=bulk_operations, refresh=True)
+
+                # Check for errors in bulk response
+                if response.get("errors", False):
+                    logger.error("Some errors occurred during bulk indexing:")
+                    for item in response.get("items", []):
+                        if "index" in item and item["index"].get("error"):
+                            error_recipe_id = item["index"]["_id"]
+                            error_msg = item["index"]["error"]["reason"]
+                            logger.error(
+                                f"Failed to index recipe {error_recipe_id}: {error_msg}"
+                            )
+                else:
+                    # Extract successfully indexed recipe IDs
+                    for item in response.get("items", []):
+                        if "index" in item and item["index"].get("result") == "created":
+                            indexed_recipe_ids.append(item["index"]["_id"])
+
+                logger.info(
+                    f"Successfully bulk indexed {len(indexed_recipe_ids)} recipes in Elasticsearch"
+                )
+                return indexed_recipe_ids
 
         except Exception as e:
-            logger.error(f"Error creating Elasticsearch index: {e}")
-            return False
+            logger.error(f"Failed to bulk index recipes in Elasticsearch: {e}")
+            return []
 
     def _get_recipe_feature_vectors(
         self, recipe_ids: List[str]
