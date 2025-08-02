@@ -440,7 +440,18 @@ async def create_recipes(
     recipes_data: List[RecipeCreateRequest],
     recipe_svc: RecipeService = Depends(get_recipe_service),
 ):
-    """Create multiple recipes with automatic feature vector calculation"""
+    """
+    Create multiple recipes with automatic feature vector calculation and Elasticsearch indexing.
+
+    This endpoint:
+    1. Adds recipes to the database
+    2. Generates feature vectors using TF-IDF and PCA
+    3. Indexes recipes in Elasticsearch with feature vectors
+    4. Makes recipes immediately available for similarity searches
+
+    The feature vectors enable the recipe to be included in cosine similarity queries
+    for personalized recommendations.
+    """
     start_time = time.time()
     recipe_dicts = [recipe.dict() for recipe in recipes_data]
     recipe_ids = recipe_svc.add_recipe(recipe_dicts)

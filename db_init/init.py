@@ -4,11 +4,18 @@
 
 import json
 import os
+import pickle
 import sys
+import time
+from typing import Any, Dict, List, Tuple
 
+import numpy as np
 import pymysql
 from dotenv import load_dotenv
 from elasticsearch import Elasticsearch
+from sklearn.decomposition import PCA
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import StandardScaler
 
 # --- Configuration ---
 # Load the database information from .env
@@ -26,6 +33,9 @@ ES_INDEX = "recipes"
 
 # Path to your JSON file
 JSON_FILE_PATH = "init_dataset.json"
+
+# PCA configuration
+MAX_DIMENSIONS = 4000
 
 
 # --- Helper Functions ---
@@ -48,6 +58,120 @@ def safe_float(value):
 def safe_string(value):
     """Safely convert value to string, return empty string if None"""
     return str(value) if value is not None else ""
+
+
+def prepare_recipe_text(recipe: Dict[str, Any]) -> str:
+    """Prepare text content from recipe for TF-IDF vectorization"""
+    text_parts = []
+
+    # Title
+    if recipe.get("title"):
+        text_parts.append(recipe["title"])
+
+    # Description
+    if recipe.get("description"):
+        text_parts.append(recipe["description"])
+
+    # Ingredients (join list into string)
+    if recipe.get("ingredients"):
+        ingredients_text = " ".join(recipe["ingredients"])
+        text_parts.append(ingredients_text)
+
+    # Instructions (join list into string)
+    if recipe.get("instructions"):
+        instructions_text = " ".join(recipe["instructions"])
+        text_parts.append(instructions_text)
+
+    # Keywords
+    if recipe.get("keywords"):
+        keywords_text = " ".join(recipe["keywords"])
+        text_parts.append(keywords_text)
+
+    # Category and cuisine
+    if recipe.get("category"):
+        text_parts.append(recipe["category"])
+
+    if recipe.get("cuisine"):
+        text_parts.append(recipe["cuisine"])
+
+    # Dietary restrictions
+    if recipe.get("dietary_restrictions"):
+        dietary_text = " ".join(recipe["dietary_restrictions"])
+        text_parts.append(dietary_text)
+
+    return " ".join(text_parts)
+
+
+def generate_feature_vectors(
+    recipes: List[Dict[str, Any]],
+) -> Tuple[np.ndarray, TfidfVectorizer, PCA]:
+    """Generate TF-IDF feature vectors and apply PCA dimensionality reduction"""
+    print("Generating feature vectors...")
+
+    # Prepare text data for all recipes
+    recipe_texts = []
+    valid_recipe_indices = []
+
+    for i, recipe in enumerate(recipes):
+        text = prepare_recipe_text(recipe)
+        if text.strip():  # Only include non-empty texts
+            recipe_texts.append(text)
+            valid_recipe_indices.append(i)
+
+    print(f"Prepared {len(recipe_texts)} recipe texts for vectorization")
+
+    # Create TF-IDF vectorizer with bag of words approach
+    tfidf_vectorizer = TfidfVectorizer(
+        max_features=10000,  # Limit features to prevent memory issues
+        stop_words="english",
+        ngram_range=(1, 2),  # Include unigrams and bigrams
+        min_df=2,  # Minimum document frequency
+        max_df=0.95,  # Maximum document frequency
+        lowercase=True,
+        strip_accents="unicode",
+    )
+
+    # Fit and transform the text data
+    tfidf_matrix = tfidf_vectorizer.fit_transform(recipe_texts)
+    print(f"TF-IDF matrix shape: {tfidf_matrix.shape}")
+
+    # Convert to dense array for PCA
+    tfidf_dense = tfidf_matrix.toarray()
+
+    # Apply PCA for dimensionality reduction
+    n_components = min(MAX_DIMENSIONS, tfidf_dense.shape[1], tfidf_dense.shape[0])
+
+    # Standardize the data before PCA
+    scaler = StandardScaler()
+    tfidf_scaled = scaler.fit_transform(tfidf_dense)
+
+    # Apply PCA
+    pca = PCA(n_components=n_components, random_state=42)
+    feature_vectors = pca.fit_transform(tfidf_scaled)
+
+    print(
+        f"PCA reduced dimensions from {tfidf_dense.shape[1]} to {feature_vectors.shape[1]}"
+    )
+    print(f"Explained variance ratio: {pca.explained_variance_ratio_.sum():.4f}")
+
+    return feature_vectors, tfidf_vectorizer, pca, valid_recipe_indices
+
+
+def save_models(
+    tfidf_vectorizer: TfidfVectorizer,
+    pca: PCA,
+    filename: str = "ml_models/recipe_models.pkl",
+):
+    """Save the trained TF-IDF vectorizer and PCA model for later use"""
+    try:
+        models = {"tfidf_vectorizer": tfidf_vectorizer, "pca": pca}
+        with open(filename, "wb") as f:
+            pickle.dump(models, f)
+        print(f"Models saved to {filename}")
+        return True
+    except Exception as e:
+        print(f"Error saving models: {e}")
+        return False
 
 
 # --- Main Script ---
@@ -179,6 +303,20 @@ if __name__ == "__main__":
             conn.close()
             print("Database connection closed.")
 
+    # --- Generate Feature Vectors ---
+    print("\nStarting feature vector generation...")
+    start_time = time.time()
+
+    feature_vectors, tfidf_vectorizer, pca, valid_recipe_indices = (
+        generate_feature_vectors(all_recipes_raw_data)
+    )
+
+    vectorization_time = time.time() - start_time
+    print(f"Feature vector generation completed in {vectorization_time:.2f} seconds")
+
+    # Save the trained models
+    save_models(tfidf_vectorizer, pca)
+
     # --- Elasticsearch Indexing ---
     print("\nStarting Elasticsearch indexing...")
 
@@ -195,7 +333,8 @@ if __name__ == "__main__":
 
         # Create index if it doesn't exist
         if not es.indices.exists(index=ES_INDEX):
-            # Define the mapping for recipe search and more_like_this queries
+            # Define the mapping for recipe search with feature vectors
+            feature_vector_dims = feature_vectors.shape[1]
             mapping = {
                 "mappings": {
                     "properties": {
@@ -205,32 +344,21 @@ if __name__ == "__main__":
                             "analyzer": "standard",
                             "fields": {
                                 "keyword": {"type": "keyword"},
-                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"},
                             },
                         },
                         "description": {
                             "type": "text",
                             "analyzer": "standard",
-                            "fields": {
-                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"}
-                            },
                         },
                         "recipe_url": {"type": "keyword"},
                         "image_url": {"type": "keyword"},
                         "ingredients": {
                             "type": "text",
                             "analyzer": "standard",
-                            "fields": {
-                                "keyword": {"type": "keyword"},
-                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"},
-                            },
                         },
                         "instructions": {
                             "type": "text",
                             "analyzer": "standard",
-                            "fields": {
-                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"}
-                            },
                         },
                         "category": {
                             "type": "text",
@@ -250,10 +378,6 @@ if __name__ == "__main__":
                         "keywords": {
                             "type": "text",
                             "analyzer": "standard",
-                            "fields": {
-                                "keyword": {"type": "keyword"},
-                                "ngram": {"type": "text", "analyzer": "ngram_analyzer"},
-                            },
                         },
                         "dietary_restrictions": {
                             "type": "text",
@@ -262,25 +386,15 @@ if __name__ == "__main__":
                         },
                         "total_time": {"type": "integer"},
                         "overall_rating": {"type": "float"},
+                        "feature_vector": {
+                            "type": "dense_vector",
+                            "dims": feature_vector_dims,
+                            "index": True,
+                            "similarity": "cosine",
+                        },
                     }
                 },
                 "settings": {
-                    "analysis": {
-                        "analyzer": {
-                            "ngram_analyzer": {
-                                "type": "custom",
-                                "tokenizer": "standard",
-                                "filter": ["lowercase", "ngram_filter"],
-                            }
-                        },
-                        "filter": {
-                            "ngram_filter": {
-                                "type": "ngram",
-                                "min_gram": 2,
-                                "max_gram": 3,
-                            }
-                        },
-                    },
                     "number_of_shards": 1,
                     "number_of_replicas": 0,
                 },
@@ -291,10 +405,18 @@ if __name__ == "__main__":
         else:
             print(f"Elasticsearch index {ES_INDEX} already exists")
 
-        # Index recipes in Elasticsearch
+        # Index recipes in Elasticsearch with feature vectors
         indexed_count = 0
-        for recipe in all_recipes_raw_data:
+        for i, recipe in enumerate(all_recipes_raw_data):
             try:
+                # Get feature vector for this recipe
+                if i in valid_recipe_indices:
+                    vector_index = valid_recipe_indices.index(i)
+                    feature_vector = feature_vectors[vector_index]
+                else:
+                    # If no feature vector (empty text), use zero vector
+                    feature_vector = np.zeros(feature_vectors.shape[1])
+
                 # Create document for Elasticsearch
                 doc = {
                     "id": recipe["id"],
@@ -302,23 +424,16 @@ if __name__ == "__main__":
                     "description": safe_string(recipe.get("description", "")).strip(),
                     "recipe_url": safe_string(recipe.get("recipe_url", "")).strip(),
                     "image_url": safe_string(recipe.get("image_url", "")).strip(),
-                    "ingredients": recipe.get(
-                        "ingredients", []
-                    ),  # Keep as array for better MLT
-                    "instructions": recipe.get(
-                        "instructions", []
-                    ),  # Keep as array for better MLT
+                    "ingredients": recipe.get("ingredients", []),
+                    "instructions": recipe.get("instructions", []),
                     "category": safe_string(recipe.get("category", "")).strip(),
                     "cuisine": safe_string(recipe.get("cuisine", "")).strip(),
                     "site_name": safe_string(recipe.get("site_name", "")).strip(),
-                    "keywords": recipe.get(
-                        "keywords", []
-                    ),  # Keep as array for better MLT
-                    "dietary_restrictions": recipe.get(
-                        "dietary_restrictions", []
-                    ),  # Keep as array for better MLT
+                    "keywords": recipe.get("keywords", []),
+                    "dietary_restrictions": recipe.get("dietary_restrictions", []),
                     "total_time": safe_int(recipe.get("total_time")),
                     "overall_rating": safe_float(recipe.get("overall_rating")),
+                    "feature_vector": feature_vector.tolist(),
                 }
 
                 # Index the document using the recipe ID as the document ID
@@ -351,8 +466,8 @@ if __name__ == "__main__":
             for hit in test_response["hits"]["hits"][:5]:
                 print(f"  - {hit['_source']['title']}")
 
-        # Test more_like_this functionality
-        print("\nTesting more_like_this functionality...")
+        # Test feature vector similarity functionality
+        print("\nTesting feature vector similarity functionality...")
 
         # Recipe IDs for various alcoholic beverages to use as reference
         test_recipe_ids = [
@@ -361,82 +476,97 @@ if __name__ == "__main__":
             "ed536e65-8e1e-4585-ab9e-9325cc03cce0",
         ]
 
-        # Create like clauses for the more_like_this query
-        like_clauses = []
+        # Find feature vectors for test recipes
+        test_feature_vectors = []
         exclude_ids = []
 
         for recipe_id in test_recipe_ids:
-            like_clauses.append({"_index": ES_INDEX, "_id": recipe_id})
-            exclude_ids.append(recipe_id)
+            try:
+                # Search for the recipe by ID
+                search_result = es.search(
+                    index=ES_INDEX,
+                    body={"query": {"term": {"id": recipe_id}}, "size": 1},
+                )
 
-        # Create the single more_like_this query with all test recipes
-        query = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {
-                            "more_like_this": {
-                                "fields": [
-                                    "title^2",  # Recipe title (weighted 2x)
-                                    "ingredients",  # Recipe ingredients
-                                    "keywords",  # Recipe keywords
-                                    "category",  # Recipe category
-                                    "cuisine",  # Cuisine type
-                                ],
-                                "like": like_clauses,
-                                "min_term_freq": 1,
-                                "max_query_terms": 12,
-                                "min_doc_freq": 1,
-                            }
-                        }
-                    ],
-                    "must_not": [{"terms": {"id": exclude_ids}}],
-                }
-            },
-            "size": 10,
-            "_source": [
-                "id",
-                "title",
-                "description",
-                "recipe_url",
-                "image_url",
-                "ingredients",
-                "instructions",
-                "category",
-                "cuisine",
-                "site_name",
-                "keywords",
-                "dietary_restrictions",
-                "total_time",
-                "overall_rating",
-            ],
-        }
+                if search_result["hits"]["total"]["value"] > 0:
+                    recipe_doc = search_result["hits"]["hits"][0]["_source"]
+                    feature_vector = np.array(recipe_doc.get("feature_vector", []))
 
-        try:
-            more_like_response = es.search(index=ES_INDEX, body=query)
+                    if len(feature_vector) > 0:
+                        test_feature_vectors.append(feature_vector)
+                        exclude_ids.append(recipe_id)
+                        print(f"Found feature vector for test recipe: {recipe_id}")
+                    else:
+                        print(f"No feature vector found for test recipe: {recipe_id}")
+                else:
+                    print(f"Test recipe not found in index: {recipe_id}")
+
+            except Exception as e:
+                print(f"Error finding feature vector for {recipe_id}: {e}")
+
+        if test_feature_vectors:
+            # Create user preference vector by averaging test recipe vectors
+            user_preference = np.mean(test_feature_vectors, axis=0)
+
+            # Normalize the preference vector
+            norm = np.linalg.norm(user_preference)
+            if norm > 0:
+                user_preference = user_preference / norm
 
             print(
-                f"more_like_this query returned {len(more_like_response['hits']['hits'])} results"
+                f"Created user preference vector with {len(user_preference)} dimensions"
             )
-            if more_like_response["hits"]["hits"]:
-                print("Top similar recipes:")
-                # Get the maximum score for normalization
-                max_score = more_like_response["hits"]["hits"][0]["_score"]
 
-                for i, hit in enumerate(more_like_response["hits"]["hits"][:10], 1):
-                    source = hit["_source"]
-                    # Normalize score to 0-1 range
-                    normalized_score = hit["_score"] / max_score if max_score > 0 else 0
-                    print(
-                        f"  {i}. {source['title']} (Score: {hit['_score']:.2f}, Normalized: {normalized_score:.3f})"
-                    )
-                    print(f"     Category: {source.get('category', 'N/A')}")
-                    print(f"     Cuisine: {source.get('cuisine', 'N/A')}")
-            else:
-                print("No similar recipes found")
+            # Find similar recipes using cosine similarity
+            try:
+                search_result = es.search(
+                    index=ES_INDEX,
+                    body={
+                        "query": {
+                            "script_score": {
+                                "query": {
+                                    "bool": {
+                                        "must_not": [{"terms": {"id": exclude_ids}}]
+                                    },
+                                },
+                                "script": {
+                                    "source": "cosineSimilarity(params.query_vector, 'feature_vector') + 1.0",
+                                    "params": {
+                                        "query_vector": user_preference.tolist()
+                                    },
+                                },
+                            }
+                        },
+                        "size": 10,
+                    },
+                )
 
-        except Exception as e:
-            print(f"Error testing more_like_this query: {e}")
+                print(
+                    f"Feature vector similarity query returned {len(search_result['hits']['hits'])} results"
+                )
+                if search_result["hits"]["hits"]:
+                    print("Top similar recipes:")
+                    # Get the maximum score for normalization
+                    max_score = search_result["hits"]["hits"][0]["_score"]
+
+                    for i, hit in enumerate(search_result["hits"]["hits"][:10], 1):
+                        source = hit["_source"]
+                        # Normalize score to 0-1 range
+                        normalized_score = (
+                            hit["_score"] / max_score if max_score > 0 else 0
+                        )
+                        print(
+                            f"  {i}. {source['title']} (Score: {hit['_score']:.2f}, Normalized: {normalized_score:.3f})"
+                        )
+                        print(f"     Category: {source.get('category', 'N/A')}")
+                        print(f"     Cuisine: {source.get('cuisine', 'N/A')}")
+                else:
+                    print("No similar recipes found")
+
+            except Exception as e:
+                print(f"Error testing feature vector similarity query: {e}")
+        else:
+            print("No valid feature vectors found for test recipes")
 
     except Exception as e:
         print(f"Elasticsearch error: {e}")

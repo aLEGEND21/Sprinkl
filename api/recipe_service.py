@@ -6,7 +6,6 @@ from typing import Dict, List, Optional
 from database import DatabaseManager
 from dotenv import load_dotenv
 from es_service import ElasticsearchService
-from models import Recipe
 
 # Load environment variables
 load_dotenv()
@@ -45,7 +44,7 @@ class RecipeService:
 
     def add_recipe(self, recipes_data: List[Dict]) -> List[str]:
         """
-        Add multiple recipes to the database and Elasticsearch efficiently
+        Add multiple recipes to the database and Elasticsearch with feature vector generation
 
         Args:
             recipes_data: List of recipe dicts, each containing:
@@ -104,25 +103,86 @@ class RecipeService:
         # Batch insert into database
         try:
             recipe_ids = self.db_manager.add_multiple_recipes(recipes_to_add)
+            logger.info(f"Successfully added {len(recipe_ids)} recipes to database")
         except Exception as e:
             logger.error(f"Database error while adding recipes: {e}")
             raise RuntimeError(f"Failed to add recipes to database: {e}")
 
-        # Batch index in Elasticsearch
+        # Index in Elasticsearch with feature vectors
         if self.es_service:
+            # Check if feature vector models are available
+            if not self.es_service.tfidf_vectorizer or not self.es_service.pca:
+                logger.warning(
+                    "Feature vector models not loaded. Recipes will be indexed without feature vectors."
+                )
+                logger.warning(
+                    "This may affect similarity search functionality for new recipes."
+                )
+
             try:
+                indexed_count = 0
                 for recipe_data in recipes_to_add:
+                    # Convert database format back to dict format for feature vector generation
+                    es_recipe_data = {
+                        "id": recipe_data["id"],
+                        "title": recipe_data["title"],
+                        "description": recipe_data["description"],
+                        "recipe_url": recipe_data["recipe_url"],
+                        "image_url": recipe_data["image_url"],
+                        "ingredients": json.loads(recipe_data["ingredients"]),
+                        "instructions": json.loads(recipe_data["instructions"]),
+                        "category": recipe_data["category"],
+                        "cuisine": recipe_data["cuisine"],
+                        "site_name": recipe_data["site_name"],
+                        "keywords": json.loads(recipe_data["keywords"]),
+                        "dietary_restrictions": json.loads(
+                            recipe_data["dietary_restrictions"]
+                        ),
+                        "total_time": recipe_data["total_time"],
+                        "overall_rating": recipe_data["overall_rating"],
+                    }
+
                     success = self.es_service.index_recipe(
-                        recipe_data["id"], recipe_data["title"]
+                        recipe_data["id"], recipe_data["title"], es_recipe_data
                     )
-                    if not success:
+                    if success:
+                        indexed_count += 1
+                        logger.debug(
+                            f"Successfully indexed recipe {recipe_data['id']} with feature vector"
+                        )
+                    else:
                         logger.warning(
                             f"Failed to index recipe in Elasticsearch: {recipe_data['id']}"
                         )
+
+                logger.info(
+                    f"Successfully indexed {indexed_count} recipes in Elasticsearch with feature vectors"
+                )
+
+                # Refresh the index to make new documents searchable immediately
+                try:
+                    self.es_service.es.indices.refresh(index=self.es_service.INDEX_NAME)
+                    logger.info("Elasticsearch index refreshed")
+                except Exception as e:
+                    logger.warning(f"Failed to refresh Elasticsearch index: {e}")
+
             except Exception as e:
-                logger.warning(f"Failed to index recipes in Elasticsearch: {e}")
+                logger.error(f"Failed to index recipes in Elasticsearch: {e}")
+                # Don't raise here - recipes are already in database, just log the error
 
         return recipe_ids
+
+    def get_recipe(self, recipe_id: str):
+        """
+        Get a recipe by ID from the database
+
+        Args:
+            recipe_id: ID of the recipe to retrieve
+
+        Returns:
+            Recipe object or None if not found
+        """
+        return self.db_manager.get_recipe(recipe_id)
 
     def get_most_similar_recipe(self, recipe_id: str) -> Optional[Dict]:
         """
@@ -164,13 +224,4 @@ class RecipeService:
         return {
             "similar_recipe": similar_recipe,
             "similar_recipe_title": similar_recipe.title,
-            "similarity_score": 0.85,  # Placeholder score since we're using Elasticsearch
         }
-
-    def get_recipe(self, recipe_id: str) -> Optional[Recipe]:
-        """Get a recipe by ID using DatabaseManager"""
-        try:
-            return self.db_manager.get_recipe(recipe_id)
-        except Exception as e:
-            logger.error(f"Error getting recipe {recipe_id}: {e}")
-            return None

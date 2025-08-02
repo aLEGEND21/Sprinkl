@@ -8,7 +8,8 @@ services:
   api:
     ports:
       - "3041:8000"
-
+    volumes:
+      - ml_models:/app/ml_models # Shared volume for ML models
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers
     networks:
       - default
@@ -30,3 +31,6 @@ networks:
   nginx-proxy:
     name: nginx-proxy # Used for reverse proxy across multiple services
     external: true
+
+volumes:
+  ml_models: # Shared volume for ML models
