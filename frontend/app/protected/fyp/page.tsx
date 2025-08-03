@@ -3,7 +3,7 @@
 import { FYPRecipeCard } from "@/components/fyp-recipe-card";
 import { Recipe, RecommendationResponse, UserFeedbackResponse } from "@/types";
 import { useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export default function FYP() {
@@ -14,6 +14,19 @@ export default function FYP() {
   const [swipedRecipeId, setSwipedRecipeId] = useState<string | null>(null); // Track the swiped recipe id instead of removing from the queue so that the animation can complete
   const [savedRecipeIds, setSavedRecipeIds] = useState<Set<string>>(new Set()); // Track saved recipe IDs
 
+  // Utility function to preload images
+  const preloadImages = useCallback((recipes: Recipe[]) => {
+    const imageUrls = recipes
+      .map((recipe) => recipe.image_url || "")
+      .filter((url) => url && url !== "/placeholder.svg");
+
+    // Preload images in background
+    imageUrls.forEach((url) => {
+      const img = new Image();
+      img.src = url;
+    });
+  }, []);
+
   // Current recipe should always be the first non-swiped recipe in the recommendations array
   useEffect(() => {
     if (recommendations.length > 0) {
@@ -21,6 +34,14 @@ export default function FYP() {
         (recipe) => recipe.id !== swipedRecipeId,
       );
       setCurrentRecipe(firstNonSwiped || null);
+
+      // Trigger immediate preloading of next images when current recipe changes
+      if (firstNonSwiped) {
+        // Force a re-render to trigger preloading
+        setTimeout(() => {
+          setCurrentRecipe(firstNonSwiped);
+        }, 0);
+      }
     } else {
       setCurrentRecipe(null);
     }
@@ -40,6 +61,7 @@ export default function FYP() {
 
       if (response.ok) {
         const data: RecommendationResponse = await response.json();
+
         setRecommendations(data.recommendations);
         if (data.recommendations && data.recommendations.length > 0) {
           setCurrentRecipe(data.recommendations[0]);
@@ -193,10 +215,23 @@ export default function FYP() {
     }
   }, [session?.user?.id]);
 
+  // Preload images whenever recommendations change
+  useEffect(() => {
+    if (recommendations.length > 0) {
+      // Preload the next few recipes that aren't swiped
+      const recipesToPreload = recommendations
+        .filter((recipe) => recipe.id !== swipedRecipeId)
+        .slice(0, 5); // Preload next 5 recipes
+      preloadImages(recipesToPreload);
+    }
+  }, [recommendations, swipedRecipeId, preloadImages]);
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center pt-16">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-orange-500"></div>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-orange-500"></div>
+        </div>
       </div>
     );
   }
