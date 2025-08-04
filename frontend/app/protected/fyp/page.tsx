@@ -8,11 +8,10 @@ import { toast } from "sonner";
 
 export default function FYP() {
   const { data: session } = useSession();
-  const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
   const [recommendations, setRecommendations] = useState<Recipe[]>([]); // This array is treated as a queue
-  const [swipedRecipeId, setSwipedRecipeId] = useState<string | null>(null); // Track the swiped recipe id instead of removing from the queue so that the animation can complete
-  const [savedRecipeIds, setSavedRecipeIds] = useState<Set<string>>(new Set()); // Track saved recipe IDs
+  const [savedRecipeIds, setSavedRecipeIds] = useState<Set<string>>(new Set());
 
   // Utility function to preload images
   const preloadImages = useCallback((recipes: Recipe[]) => {
@@ -26,26 +25,6 @@ export default function FYP() {
       img.src = url;
     });
   }, []);
-
-  // Current recipe should always be the first non-swiped recipe in the recommendations array
-  useEffect(() => {
-    if (recommendations.length > 0) {
-      const firstNonSwiped = recommendations.find(
-        (recipe) => recipe.id !== swipedRecipeId,
-      );
-      setCurrentRecipe(firstNonSwiped || null);
-
-      // Trigger immediate preloading of next images when current recipe changes
-      if (firstNonSwiped) {
-        // Force a re-render to trigger preloading
-        setTimeout(() => {
-          setCurrentRecipe(firstNonSwiped);
-        }, 0);
-      }
-    } else {
-      setCurrentRecipe(null);
-    }
-  }, [recommendations, swipedRecipeId]);
 
   const fetchRecommendations = async () => {
     if (!session?.user?.id) {
@@ -138,28 +117,13 @@ export default function FYP() {
   const handleSwipe = async (swipe: "like" | "dislike") => {
     if (!currentRecipe) return;
 
-    // Capture the recipe ID and title before any state changes
-    const recipeId = currentRecipe.id;
-    const recipeTitle = currentRecipe.title;
-
-    // Mark the recipe as swiped to hide it from the current recipe selection
-    setSwipedRecipeId(recipeId);
-
     // Submit feedback to backend in the background
     try {
-      await submitFeedback(recipeId, swipe);
-      // Remove the recipe from the array after backend submission
-      setRecommendations((prev) => {
-        return prev.filter((recipe) => recipe.id !== recipeId);
-      });
-      // Clear the swiped recipe ID
-      setSwipedRecipeId(null);
+      await submitFeedback(currentRecipe.id, swipe);
     } catch (error) {
       toast.error("Error", {
         description: "Failed to submit feedback",
       });
-      // If backend submission fails, unmark the recipe as swiped
-      setSwipedRecipeId(null);
     }
   };
 
@@ -208,6 +172,14 @@ export default function FYP() {
     }
   };
 
+  // Pass a seperate function to the Recipe Card to handle the next recipe because it must be called after the
+  // animation completes
+  const handleNextRecipe = (latest: "like" | "dislike") => {
+    setRecommendations((prev) => {
+      return prev.filter((recipe) => recipe.id !== currentRecipe?.id);
+    });
+  };
+
   useEffect(() => {
     if (session?.user?.id) {
       fetchRecommendations();
@@ -215,16 +187,16 @@ export default function FYP() {
     }
   }, [session?.user?.id]);
 
-  // Preload images whenever recommendations change
+  // Current recipe should always be the first non-swiped recipe in the recommendations array
+  // Preload images for the next 5 recipes
   useEffect(() => {
     if (recommendations.length > 0) {
-      // Preload the next few recipes that aren't swiped
-      const recipesToPreload = recommendations
-        .filter((recipe) => recipe.id !== swipedRecipeId)
-        .slice(0, 5); // Preload next 5 recipes
-      preloadImages(recipesToPreload);
+      setCurrentRecipe(recommendations[0]);
+      preloadImages(recommendations.slice(0, 5));
+    } else {
+      setCurrentRecipe(null);
     }
-  }, [recommendations, swipedRecipeId, preloadImages]);
+  }, [recommendations, preloadImages]);
 
   if (loading) {
     return (
@@ -257,6 +229,7 @@ export default function FYP() {
         recipe={currentRecipe}
         onSwipe={handleSwipe}
         onBookmark={handleBookmark}
+        onAnimationComplete={handleNextRecipe}
         isSaved={currentRecipe ? savedRecipeIds.has(currentRecipe.id) : false}
       />
     </div>

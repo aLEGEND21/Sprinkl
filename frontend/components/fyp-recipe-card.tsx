@@ -20,6 +20,7 @@ interface FYPRecipeCardProps {
   recipe: Recipe;
   onSwipe: (swipe: "like" | "dislike") => void;
   onBookmark: () => void;
+  onAnimationComplete: (latest: "like" | "dislike") => void;
   isSaved?: boolean;
 }
 
@@ -27,10 +28,11 @@ export function FYPRecipeCard({
   recipe,
   onSwipe,
   onBookmark,
+  onAnimationComplete,
   isSaved = false,
 }: FYPRecipeCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false); // Tracks when to disable feedback buttons
   const [swipeDirection, setSwipeDirection] = useState<
     "like" | "dislike" | null
   >(null);
@@ -39,16 +41,15 @@ export function FYPRecipeCard({
     if (isAnimating) return;
     setIsAnimating(true);
     setSwipeDirection(action);
+    onSwipe(action); // Sends feedback to backend. Showing the next recipe is handled separately after anim is done
+  };
 
-    // Call onSwipe immediately to mark recipe as swiped
-    onSwipe(action);
-
-    // Reset animation state after animation completes
-    setTimeout(() => {
-      setIsAnimating(false);
-      setSwipeDirection(null);
-      setExpanded(false);
-    }, 300);
+  // Trigger backend function to remove the recipe from the recommendations array and load the next recipe
+  const handleAnimationComplete = (latest: "like" | "dislike") => {
+    setIsAnimating(false);
+    setSwipeDirection(null);
+    setExpanded(false);
+    onAnimationComplete(latest);
   };
 
   const slideVariants = {
@@ -68,7 +69,9 @@ export function FYPRecipeCard({
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center">
+    <div
+      className={`flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center`}
+    >
       <AnimatePresence mode="wait">
         <motion.div
           key={recipe.id}
@@ -76,7 +79,7 @@ export function FYPRecipeCard({
           variants={slideVariants}
           initial="initial"
           animate={swipeDirection || "initial"}
-          exit={swipeDirection === "like" ? "like" : "dislike"}
+          onAnimationComplete={() => handleAnimationComplete(swipeDirection!)}
         >
           {/* Swipe overlay indicators */}
           <AnimatePresence>
