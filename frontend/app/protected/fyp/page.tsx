@@ -1,9 +1,10 @@
 "use client";
 
 import { FYPRecipeCard } from "@/components/fyp-recipe-card";
+import { RecipeImage } from "@/components/ui/recipe-image";
 import { Recipe, RecommendationResponse, UserFeedbackResponse } from "@/types";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export default function FYP() {
@@ -12,19 +13,6 @@ export default function FYP() {
   const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
   const [recommendations, setRecommendations] = useState<Recipe[]>([]); // This array is treated as a queue
   const [savedRecipeIds, setSavedRecipeIds] = useState<Set<string>>(new Set());
-
-  // Utility function to preload images
-  const preloadImages = useCallback((recipes: Recipe[]) => {
-    const imageUrls = recipes
-      .map((recipe) => recipe.image_url || "")
-      .filter((url) => url && url !== "/placeholder.svg");
-
-    // Preload images in background
-    imageUrls.forEach((url) => {
-      const img = new Image();
-      img.src = url;
-    });
-  }, []);
 
   const fetchRecommendations = async () => {
     if (!session?.user?.id) {
@@ -188,15 +176,13 @@ export default function FYP() {
   }, [session?.user?.id]);
 
   // Current recipe should always be the first non-swiped recipe in the recommendations array
-  // Preload images for the next 5 recipes
   useEffect(() => {
     if (recommendations.length > 0) {
       setCurrentRecipe(recommendations[0]);
-      preloadImages(recommendations.slice(0, 5));
     } else {
       setCurrentRecipe(null);
     }
-  }, [recommendations, preloadImages]);
+  }, [recommendations]);
 
   if (loading) {
     return (
@@ -232,6 +218,20 @@ export default function FYP() {
         onAnimationComplete={handleNextRecipe}
         isSaved={currentRecipe ? savedRecipeIds.has(currentRecipe.id) : false}
       />
+
+      {/* Preload images for the next recipes */}
+      {recommendations.map((recipe) => (
+        <RecipeImage
+          key={recipe.id}
+          src={recipe.image_url || ""}
+          alt={recipe.title || ""}
+          width={400}
+          height={300}
+          className="hidden"
+          draggable={false}
+          priority={true}
+        />
+      ))}
     </div>
   );
 }
