@@ -1,16 +1,10 @@
 "use client";
 
+import { Logo } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Bookmark,
-  ChefHat,
-  Clock,
-  Heart,
-  Search,
-  Smartphone,
-} from "lucide-react";
+import { Bookmark, Clock, Heart, Search, Smartphone } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
@@ -53,10 +47,7 @@ export default function LandingPage() {
       <nav className="bg-background/80 border-border sticky top-0 z-50 border-b backdrop-blur-md">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <ChefHat className="h-8 w-8 text-orange-500" />
-              <span className="text-foreground text-xl font-bold">Sprinkl</span>
-            </div>
+            <Logo size="lg" />
             <div className="flex items-center space-x-3">
               <Button
                 variant="ghost"
@@ -92,10 +83,10 @@ export default function LandingPage() {
                   Sprinkl
                 </h1>
                 <p className="text-muted-foreground text-xl font-semibold lg:text-2xl">
-                  The only recipe app you'll ever need
+                  The recipe app that knows you
                 </p>
                 <p className="text-muted-foreground mx-auto max-w-lg text-lg lg:mx-0">
-                  It's Tinder for recipes. Swipe through thousands of recipes to
+                  It's Tinder for food. Swipe through thousands of recipes to
                   find your perfect meal.
                 </p>
               </div>
@@ -136,6 +127,7 @@ export default function LandingPage() {
                       width={280}
                       height={200}
                       className="mb-3 h-48 w-full rounded-2xl object-cover lg:h-48"
+                      priority={true}
                     />
                     <h3 className="text-foreground mb-2 text-lg font-semibold">
                       Creamy Pasta Carbonara
@@ -297,9 +289,8 @@ export default function LandingPage() {
       {/* Footer */}
       <div className="border-border border-t px-6 py-8 lg:py-12">
         <div className="container mx-auto text-center">
-          <div className="mb-4 flex items-center justify-center space-x-2">
-            <ChefHat className="h-6 w-6 text-orange-500" />
-            <span className="text-foreground text-lg font-bold">Sprinkl</span>
+          <div className="mb-4 flex items-center justify-center">
+            <Logo size="md" />
           </div>
           <p className="text-muted-foreground text-sm">
             © {new Date().getFullYear()} Sprinkl. Made with ❤️ by{" "}
