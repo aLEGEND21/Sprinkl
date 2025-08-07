@@ -119,6 +119,41 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* iPhone-like viewport adjustments for desktop */
+  @media (min-width: 640px) {
+    html {
+      font-size: 16px; /* Base font size */
+    }
+
+    /* Adjust spacing and sizing to match iPhone */
+    .app-content * {
+      font-size: inherit;
+    }
+
+    /* Make text and elements slightly smaller to match iPhone density */
+    .app-content h1,
+    .app-content h2,
+    .app-content h3 {
+      font-size: 0.95em;
+    }
+
+    .app-content p,
+    .app-content span,
+    .app-content div {
+      font-size: 0.9em;
+    }
+
+    /* Adjust padding and margins to be more compact like iPhone */
+    .app-content .px-4 {
+      padding-left: 0.875rem;
+      padding-right: 0.875rem;
+    }
+
+    .app-content .pt-8 {
+      padding-top: 1.5rem;
+    }
+  }
 }
 
 /* Smooth transitions for card animations */
@@ -127,29 +162,48 @@
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* App container centers content vertically and horizontally. This is used to simulate
-a mobile app experience on desktop. */
+/* App container centers content vertically and horizontally and provides a mobile app experience */
 .app-container {
   min-height: 100vh;
-  min-width: 100vw;
+  width: 100vw;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 1rem;
 }
 
-/* App content: fixed size on large screens, full size on mobile */
+/* App content: iPhone 14 Pro aspect ratio on large screens, full size on mobile */
 @media (min-width: 640px) {
   .app-content {
-    width: 22rem;
-    height: 46rem;
+    height: 90vh;
+    /* iPhone 14 Pro aspect ratio is 19.5:9 */
+    width: calc(90vh * 9 / 19.5);
+    max-height: 844px; /* iPhone 14 Pro height */
+    max-width: 390px; /* iPhone 14 Pro width */
     box-shadow: 0 0 24px rgba(0, 0, 0, 0.08);
-    border-radius: 24px;
+    border-radius: 32px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     border: 1px solid #e0e0e0;
+    position: relative;
+    background: var(--background);
+    /* Ensure content fits properly within the container */
+    box-sizing: border-box;
+    /* Add padding for Dynamic Island and status bar */
+    padding-top: 30px;
+  }
+
+  /* Ensure the scrollable content area accounts for the bottom navigation */
+  .app-content .flex-1 {
+    height: calc(
+      100% - 72px
+    ); /* Bottom nav height: ~72px (including padding and safe area) */
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 }
+
 @media (max-width: 639px) {
   .app-content {
     width: 100vw;
@@ -159,5 +213,14 @@ a mobile app experience on desktop. */
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background: var(--background);
+    box-sizing: border-box;
+  }
+
+  /* On mobile, let the content area take remaining space */
+  .app-content .flex-1 {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 }

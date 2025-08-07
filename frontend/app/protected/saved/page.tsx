@@ -82,9 +82,9 @@ export default function SavedRecipes() {
   }
 
   return (
-    <div className="px-4 pt-4 pb-4">
+    <div className="flex h-full flex-col px-4 pt-4 pb-4">
       {savedRecipes.length === 0 ? (
-        <div className="my-84 text-center">
+        <div className="flex h-full flex-col items-center justify-center text-center">
           <Bookmark className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
           <h3 className="text-foreground mb-2 text-lg font-medium">
             No saved recipes yet
