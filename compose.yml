@@ -5,7 +5,7 @@ services:
     restart: always
     env_file: .env
     volumes:
-      - mariadb_data:/var/lib/mysql # Persistent data volume
+      - sprinkl_mariadb_data:/var/lib/mysql # Persistent data volume
       - ./db_init:/docker-entrypoint-initdb.d # MariaDB runs all .sql and .sh files in this directory on the first startup
     ports:
       - "3306:3306" # Expose so the DB can be accessed from the local machine in dev
@@ -88,6 +88,6 @@ services:
     command: python init.py
 
 volumes:
-  mariadb_data:
+  sprinkl_mariadb_data:
   elasticsearch_data:
   ml_models: # Shared volume for ML models between API and init containers
