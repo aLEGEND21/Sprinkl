@@ -82,18 +82,15 @@ export default function SavedRecipes() {
   }
 
   return (
-    <div className="px-4 pt-4 pb-4">
+    <div className="flex min-h-full flex-col p-4">
       {savedRecipes.length === 0 ? (
-        <div className="my-84 text-center">
-          <Bookmark className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
-          <h3 className="text-foreground mb-2 text-lg font-medium">
+        <div className="flex grow flex-col items-center justify-center space-y-4 text-center">
+          <Bookmark className="text-muted-foreground mx-auto h-12 w-12" />
+          <h3 className="text-foreground text-lg font-medium">
             No saved recipes yet
           </h3>
-          <p className="text-muted-foreground mb-4">
-            Start swiping to save your favorite recipes
-          </p>
           <Button
-            onClick={() => router.push("/fyp")}
+            onClick={() => router.push("/protected/fyp")}
             className="bg-orange-500 hover:bg-orange-600"
           >
             Discover Recipes

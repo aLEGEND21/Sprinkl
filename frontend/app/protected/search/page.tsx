@@ -182,7 +182,7 @@ export default function SearchPage() {
   };
 
   return (
-    <div className="px-4 pb-4">
+    <div className="flex min-h-full flex-col px-4 pb-4">
       {/* Search Bar */}
       <div className="bg-background border-border sticky top-0 z-20 -mx-4 mb-4 border-b px-4 py-4">
         <div className="flex gap-2">
@@ -297,7 +297,7 @@ export default function SearchPage() {
           )}
         </div>
       ) : searchQuery && !isSearching ? (
-        <div className="my-64 py-12 text-center">
+        <div className="flex grow flex-col items-center justify-center text-center">
           <Search className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
           <h3 className="text-foreground mb-2 text-lg font-medium">
             No recipes found
@@ -307,7 +307,7 @@ export default function SearchPage() {
           </p>
         </div>
       ) : !searchQuery ? (
-        <div className="my-64 py-12 text-center">
+        <div className="flex grow flex-col items-center justify-center text-center">
           <Search className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
           <h3 className="text-foreground mb-2 text-lg font-medium">
             Discover Recipes

@@ -69,9 +69,7 @@ export function FYPRecipeCard({
   };
 
   return (
-    <div
-      className={`flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center`}
-    >
+    <div className="flex flex-col items-center justify-center">
       <AnimatePresence mode="wait">
         <motion.div
           key={recipe.id}
@@ -301,11 +299,6 @@ export function FYPRecipeCard({
         >
           <Heart className="h-6 w-6 text-green-500" />
         </Button>
-      </div>
-
-      <div className="text-muted-foreground mt-4 mb-8 space-y-1 px-4 text-center text-sm">
-        <p>Tap left side to pass, right side to like</p>
-        <p>Or use the buttons above • Tap ↑ for details</p>
       </div>
     </div>
   );

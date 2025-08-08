@@ -140,8 +140,9 @@ a mobile app experience on desktop. */
 /* App content: fixed size on large screens, full size on mobile */
 @media (min-width: 640px) {
   .app-content {
-    width: 22rem;
-    height: 46rem;
+    height: 90vh;
+    aspect-ratio: 1179 / 2556; /* iPhone 14 Pro portrait */
+    width: auto;
     box-shadow: 0 0 24px rgba(0, 0, 0, 0.08);
     border-radius: 24px;
     display: flex;
